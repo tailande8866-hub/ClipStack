@@ -51,10 +51,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:set', (_event, key: string, value: string) => {
     setSetting(key, value)
-    if (key === 'retention_days') {
-      const paths = cleanupExpired(parseInt(value, 10))
-      for (const p of paths) {
-        if (existsSync(p)) unlinkSync(p)
+    if (key === 'retention_hours') {
+      const hours = parseInt(value, 10)
+      if (Number.isFinite(hours) && hours > 0) {
+        const paths = cleanupExpired(hours)
+        for (const p of paths) {
+          if (existsSync(p)) unlinkSync(p)
+        }
       }
     }
   })

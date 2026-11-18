@@ -9,13 +9,22 @@ import type { SettingsInfo } from './types/clipboard'
 type TabKey = 'general' | 'storage' | 'feedback' | 'about'
 
 const RETENTION_OPTIONS = [
-  { value: '1', label: '1 天' },
-  { value: '3', label: '3 天' },
-  { value: '5', label: '5 天' },
-  { value: '7', label: '7 天' },
-  { value: '14', label: '14 天' },
-  { value: '30', label: '30 天' },
+  { value: '2', label: '2 小时' },
+  { value: '4', label: '4 小时' },
+  { value: '6', label: '6 小时' },
+  { value: '24', label: '1 天' },
+  { value: '72', label: '3 天' },
+  { value: '168', label: '7 天' },
+  { value: '0', label: '永久' },
 ]
+
+function retentionLabel(v: string): string {
+  const hours = parseInt(v, 10)
+  if (!Number.isFinite(hours) || hours <= 0) return '永久'
+  if (hours < 24) return `${hours} 小时`
+  const days = hours / 24
+  return Number.isInteger(days) ? `${days} 天` : `${hours} 小时`
+}
 
 const IconGear = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -159,7 +168,7 @@ function App() {
 
   useEffect(() => {
     load()
-    window.electronAPI.getSetting('retention_days').then((v) => {
+    window.electronAPI.getSetting('retention_hours').then((v) => {
       if (v) setDays(v)
     })
     window.electronAPI.getUpdateStatus().then((s) => {
@@ -178,8 +187,14 @@ function App() {
 
   async function changeRetention(v: string) {
     setDays(v)
-    await window.electronAPI.setSetting('retention_days', v)
-    setNotice({ type: 'ok', text: `保留天数已设为 ${v} 天，超期记录会自动清理。` })
+    await window.electronAPI.setSetting('retention_hours', v)
+    const label = retentionLabel(v)
+    setNotice({
+      type: 'ok',
+      text: label === '永久'
+        ? '已设为永久保留，记录不会被自动清理。'
+        : `保留时长已设为 ${label}，超期记录会自动清理。`,
+    })
   }
 
   async function toggleAutostart() {
@@ -348,7 +363,7 @@ function App() {
                 <div className="row">
                   <div>
                     <div className="row-label">保留时长</div>
-                    <div className="row-hint">超过该天数的复制记录会自动清理，置顶记录不删除。</div>
+                    <div className="row-hint">超过该时长的复制记录会自动清理，置顶记录不删除；选「永久」则永不清理。</div>
                   </div>
                   <select value={days} onChange={(e) => changeRetention(e.target.value)}>
                     {RETENTION_OPTIONS.map((o) => (
@@ -451,7 +466,7 @@ function App() {
                   title="GitHub Issues"
                   subtitle="提交问题或功能建议"
                   right={<span className="mini-icon">{<IconExt />}</span>}
-                  onClick={() => window.electronAPI.openExternal(info?.issuesUrl || 'https://github.com/tailande8866-hub/clipboard-history-xiaoming/issues')}
+                  onClick={() => window.electronAPI.openExternal(info?.issuesUrl || 'https://github.com/tailande8866-hub/ClipStack/issues')}
                 />
                 <ItemRow
                   icon={<IconMail />}
@@ -541,16 +556,16 @@ function App() {
                 <ItemRow
                   icon={<IconGitHub />}
                   title="源代码与说明"
-                  subtitle="github.com/tailande8866-hub/clipboard-history-xiaoming"
+                  subtitle="github.com/tailande8866-hub/ClipStack"
                   right={<span className="mini-icon">{<IconExt />}</span>}
-                  onClick={() => window.electronAPI.openExternal(info?.repoUrl || 'https://github.com/tailande8866-hub/clipboard-history-xiaoming')}
+                  onClick={() => window.electronAPI.openExternal(info?.repoUrl || 'https://github.com/tailande8866-hub/ClipStack')}
                 />
                 <ItemRow
                   icon={<IconDoc />}
                   title="开源许可"
                   subtitle="MIT License"
                   right={<span className="mini-icon">{<IconExt />}</span>}
-                  onClick={() => window.electronAPI.openExternal((info?.repoUrl || 'https://github.com/tailande8866-hub/clipboard-history-xiaoming') + '/blob/master/LICENSE')}
+                  onClick={() => window.electronAPI.openExternal((info?.repoUrl || 'https://github.com/tailande8866-hub/ClipStack') + '/blob/master/LICENSE')}
                 />
               </div>
 

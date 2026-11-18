@@ -74,7 +74,7 @@ export interface SettingsInfo {
   appPath: string
   autostart: boolean
   stats: HistoryStats
-  retentionDays: string
+  retentionHours: string
   autoCheckUpdate: boolean
   updateCheck: UpdateCheckResult | null
   qqGroup: string

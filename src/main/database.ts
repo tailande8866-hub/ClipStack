@@ -251,9 +251,10 @@ export function setSetting(key: string, value: string): void {
   save()
 }
 
-export function cleanupExpired(retentionDays: number): string[] {
+export function cleanupExpired(retentionHours: number): string[] {
   if (!db) return []
-  const cutoff = Date.now() - retentionDays * 86400000
+  if (!Number.isFinite(retentionHours) || retentionHours <= 0) return [] // 0 = 永久保留
+  const cutoff = Date.now() - retentionHours * 3600000
 
   const stmt = db!.prepare(
     'SELECT id, image_path FROM clipboard_history WHERE is_pinned = 0 AND created_at < ? AND type = ?',
