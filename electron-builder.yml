@@ -1,6 +1,6 @@
-appId: com.clipboard-history.app
-productName: "小明剪贴板"
-copyright: Copyright 2026
+appId: com.floatpaste.app
+productName: "剪贴栈"
+copyright: Copyright 2026 剪贴栈
 
 directories:
   output: dist
@@ -11,16 +11,28 @@ files:
   - "!**/*.ts"
   - "!**/*.map"
 
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/tray.ico
+    to: tray.ico
+  - from: resources/tray.png
+    to: tray.png
+
 win:
   target:
     - target: nsis
       arch: [x64]
-  icon: resources/icon.ico
+  icon: icon.ico
+  executableName: 剪贴栈
+  artifactName: "ClipStack-${version}-${arch}.${ext}"
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: "小明剪贴板"
-  uninstallDisplayName: "小明剪贴板"
+  shortcutName: "剪贴栈"
+  uninstallDisplayName: "剪贴栈"
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
