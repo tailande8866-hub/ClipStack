@@ -1,16 +1,18 @@
 {
-  "name": "clipboard-history",
-  "version": "1.0.0",
-  "description": "Windows 历史粘贴板管理软件",
+  "name": "floatpaste",
+  "productName": "剪贴栈",
+  "version": "1.2.0",
+  "description": "剪贴栈 ClipStack —— 你的复制截图历史仓库。",
   "main": "./out/main/index.mjs",
   "scripts": {
     "dev": "cross-env ELECTRON_RUN_AS_NODE=\"\" electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder --win",
-    "package:portable": "electron-vite build && electron-builder --win portable"
+    "package:dir": "electron-vite build && electron-builder --win --dir",
+    "icon": "python tools/make-icon.py"
   },
-  "author": "",
+  "author": "tailande8866-hub",
   "license": "MIT",
   "dependencies": {
     "react": "^19.2.6",

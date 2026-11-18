@@ -279,3 +279,50 @@ export function closeDatabase(): void {
     db = null
   }
 }
+
+export interface HistoryStats {
+  total: number
+  textCount: number
+  imageCount: number
+  pinnedCount: number
+  oldest: number | null
+  newest: number | null
+}
+
+export function getStats(): HistoryStats {
+  const empty: HistoryStats = { total: 0, textCount: 0, imageCount: 0, pinnedCount: 0, oldest: null, newest: null }
+  if (!db) return empty
+  const res = db.exec(
+    `SELECT COUNT(*),
+            SUM(CASE WHEN type = 'text' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN type = 'image' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN is_pinned = 1 THEN 1 ELSE 0 END),
+            MIN(created_at),
+            MAX(created_at)
+       FROM clipboard_history`,
+  )
+  if (!res.length || !res[0].values.length) return empty
+  const row = res[0].values[0]
+  return {
+    total: Number(row[0] || 0),
+    textCount: Number(row[1] || 0),
+    imageCount: Number(row[2] || 0),
+    pinnedCount: Number(row[3] || 0),
+    oldest: row[4] === null ? null : Number(row[4]),
+    newest: row[5] === null ? null : Number(row[5]),
+  }
+}
+
+/** 迁移数据目录后，把历史记录里的图片绝对路径改到新目录 */
+export function remapImagePaths(oldImagesDir: string, newImagesDir: string): void {
+  if (!db) return
+  const oldNorm = oldImagesDir.replace(/\\/g, '/')
+  const newNorm = newImagesDir.replace(/\\/g, '/')
+  db.run(
+    `UPDATE clipboard_history
+       SET image_path = REPLACE(REPLACE(image_path, ?, ?), ?, ?)
+     WHERE image_path LIKE ?`,
+    [oldNorm, newNorm, oldImagesDir, newImagesDir, oldImagesDir + '%'],
+  )
+  save()
+}

@@ -4,9 +4,10 @@ import { formatTime } from '../utils/time'
 
 interface Props {
   item: ClipboardItem
+  onCopy: () => void
 }
 
-export default function ImageCard({ item }: Props) {
+export default function ImageCard({ item, onCopy }: Props) {
   const [src, setSrc] = useState('')
 
   useEffect(() => {
@@ -18,7 +19,7 @@ export default function ImageCard({ item }: Props) {
   }, [item.image_path])
 
   return (
-    <div className="image-card">
+    <div className="image-card" onClick={onCopy} title="点击复制这张图片">
       {src ? (
         <img className="image-card-thumb" src={src} alt="" />
       ) : (

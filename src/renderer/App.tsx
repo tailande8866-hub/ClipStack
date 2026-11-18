@@ -1,10 +1,17 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import './App.css'
 import { useClipboardHistory } from './hooks/useClipboardHistory'
 import SearchBar from './components/SearchBar'
 import RetentionSelector from './components/RetentionSelector'
 import ClipboardList from './components/ClipboardList'
 import EmptyState from './components/EmptyState'
+
+const IconGear = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+)
 
 export default function App() {
   const [search, setSearch] = useState('')
@@ -14,11 +21,81 @@ export default function App() {
     setSearch(query)
   }, [])
 
+  // 卡片靠近发光（跟随的光斑层已移除）
+  useEffect(() => {
+    let raf = 0
+
+    const update = (x: number, y: number) => {
+      document.querySelectorAll<HTMLElement>('.clipboard-card').forEach((card) => {
+        const r = card.getBoundingClientRect()
+        const cx = r.left + r.width / 2
+        const cy = r.top + r.height / 2
+        const d = Math.hypot(x - cx, y - cy)
+        card.classList.toggle('near', d < Math.max(r.width, r.height) / 2 + 56)
+      })
+    }
+
+    const onMove = (e: MouseEvent) => {
+      const x = e.clientX
+      const y = e.clientY
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        update(x, y)
+      })
+    }
+    const onLeave = () => {
+      document.querySelectorAll('.clipboard-card').forEach((c) => c.classList.remove('near'))
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseleave', onLeave)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseleave', onLeave)
+    }
+  }, [])
+
   return (
     <>
+      <div className="ambient" aria-hidden="true">
+        <span className="blob b1" />
+        <span className="blob b2" />
+        <span className="blob b3" />
+        <span className="blob b4" />
+      </div>
+      <div className="dust" aria-hidden="true" />
+      <div className="sheen" aria-hidden="true" />
+      <div className="dot-veil" aria-hidden="true" />
+
+
       <header className="app-header">
-        <h1>小明剪贴板</h1>
-        <RetentionSelector />
+        <div className="brand">
+          <span className="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#F4FAFF" strokeWidth="1.7" strokeLinecap="round">
+              <rect x="3.6" y="6.6" width="12" height="12" rx="3" opacity="0.55" />
+              <rect x="7.6" y="3.6" width="12" height="12" rx="3" fill="rgba(255,255,255,0.35)" stroke="none" />
+              <line x1="11" y1="8.6" x2="17" y2="8.6" stroke="#25406B" strokeWidth="1.5" />
+              <line x1="11" y1="11.6" x2="15" y2="11.6" stroke="#25406B" strokeWidth="1.5" opacity="0.8" />
+            </svg>
+          </span>
+          <div className="brand-text">
+            <h1>剪贴栈</h1>
+            <span className="brand-sub">复制截图历史仓库</span>
+          </div>
+        </div>
+
+        <div className="header-actions">
+          <RetentionSelector />
+          <button className="header-btn" title="设置" onClick={() => window.electronAPI.openSettings()}>
+            <IconGear />
+          </button>
+          <button className="header-btn" title="收起到悬浮球" onClick={() => window.electronAPI.collapseToFloat()}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <SearchBar onSearch={handleSearch} />

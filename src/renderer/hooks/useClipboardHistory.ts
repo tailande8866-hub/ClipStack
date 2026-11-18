@@ -23,8 +23,14 @@ export function useClipboardHistory(search?: string) {
         setItems((prev) => [item, ...prev])
       }
     })
-    return unsubscribe
-  }, [])
+    const unsubscribeData = window.electronAPI.onDataChanged(() => {
+      refresh()
+    })
+    return () => {
+      unsubscribe()
+      unsubscribeData()
+    }
+  }, [refresh])
 
   return { items, loading, refresh }
 }

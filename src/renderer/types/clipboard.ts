@@ -17,6 +17,70 @@ export interface ElectronAPI {
   getSetting: (key: string) => Promise<string | null>
   setSetting: (key: string, value: string) => Promise<void>
   onNewItem: (callback: (item: ClipboardItem) => void) => () => void
+  collapseToFloat: () => void
+  expandFromFloat: () => void
+  showFloatMenu: () => void
+  setFloatIgnore: (ignore: boolean) => void
+  quitApp: () => void
+  openSettings: () => void
+  getSettingsInfo: () => Promise<SettingsInfo>
+  chooseDataDir: () => Promise<string | null>
+  applyDataDir: (dir: string) => Promise<{ ok: boolean; message?: string }>
+  resetDataDir: () => Promise<{ ok: boolean; message?: string }>
+  openDataDir: (dir?: string) => Promise<string>
+  setAutostart: (enabled: boolean) => Promise<boolean>
+  minimizeSettings: () => void
+  closeSettings: () => void
+  onDataChanged: (callback: () => void) => () => void
+  openExternal: (url: string) => Promise<boolean>
+  copyText: (text: string) => Promise<boolean>
+  exportDiagnostics: () => Promise<{ ok: boolean; canceled?: boolean; path?: string; message?: string }>
+  getDiagnosticsText: () => Promise<string>
+  checkUpdate: () => Promise<UpdateCheckResult>
+  getUpdateStatus: () => Promise<UpdateCheckResult | null>
+  setAutoCheckUpdate: (enabled: boolean) => Promise<boolean>
+  onUpdateAvailable: (callback: (info: UpdateCheckResult) => void) => () => void
+}
+
+export interface HistoryStats {
+  total: number
+  textCount: number
+  imageCount: number
+  pinnedCount: number
+  oldest: number | null
+  newest: number | null
+}
+
+export interface UpdateCheckResult {
+  time: number
+  ok: boolean
+  hasUpdate: boolean
+  current: string
+  latest: string | null
+  message: string
+}
+
+export interface SettingsInfo {
+  dataDir: string
+  defaultDir: string
+  isCustom: boolean
+  sizeMB: number
+  dbPath: string
+  dbSizeMB: number
+  imagesDir: string
+  imageFileCount: number
+  version: string
+  exePath: string
+  appPath: string
+  autostart: boolean
+  stats: HistoryStats
+  retentionDays: string
+  autoCheckUpdate: boolean
+  updateCheck: UpdateCheckResult | null
+  qqGroup: string
+  email: string
+  repoUrl: string
+  issuesUrl: string
 }
 
 declare global {
