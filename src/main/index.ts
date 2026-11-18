@@ -13,7 +13,7 @@ import {
   shell,
   clipboard,
 } from 'electron'
-import { join, resolve } from 'path'
+import { isAbsolute, join, resolve } from 'path'
 import fs from 'fs'
 import {
   initDatabase,
@@ -520,6 +520,10 @@ async function applyDataDir(target: string): Promise<{ ok: boolean; message?: st
   const oldDir = getDataDir()
   const trimmed = (target || '').trim()
   if (!trimmed) return { ok: false, message: '目录不能为空' }
+  // 必须是完整的绝对路径（带盘符和分隔符），否则会生成“E:浮贴剪贴历史”这种怪异目录
+  if (!isAbsolute(trimmed) || !/[\\/]/.test(trimmed)) {
+    return { ok: false, message: '请选择完整路径，例如 D:\\剪贴历史' }
+  }
 
   const check = ensureDirWritable(trimmed)
   if (!check.ok) return { ok: false, message: '目录不可写：' + (check.message || '') }
@@ -568,6 +572,10 @@ async function applyDataDir(target: string): Promise<{ ok: boolean; message?: st
   startMonitoring()
   startCleanupScheduler()
   notifyDataChanged()
+  // 切换目录后强制刷新渲染层：旧渲染进程在换库后会残留失效的事件绑定，导致点按钮没反应
+  for (const win of [mainWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.reload()
+  }
   return { ok: true }
 }
 
