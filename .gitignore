@@ -11,3 +11,4 @@ _preview/
 *.log
 tools/_*.mjs
 tools/_*.py
+剪贴历史/
