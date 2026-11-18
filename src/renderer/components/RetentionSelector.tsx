@@ -1,31 +1,33 @@
 import { useState, useEffect } from 'react'
 
+// 保留时长以小时为单位，0 = 永久
 const OPTIONS = [
-  { value: '1', label: '1 天' },
-  { value: '3', label: '3 天' },
-  { value: '5', label: '5 天' },
-  { value: '7', label: '7 天' },
-  { value: '14', label: '14 天' },
-  { value: '30', label: '30 天' },
+  { value: '2', label: '2 小时' },
+  { value: '4', label: '4 小时' },
+  { value: '6', label: '6 小时' },
+  { value: '24', label: '1 天' },
+  { value: '72', label: '3 天' },
+  { value: '168', label: '7 天' },
+  { value: '0', label: '永久' },
 ]
 
 export default function RetentionSelector() {
-  const [days, setDays] = useState('3')
+  const [hours, setHours] = useState('24')
 
   useEffect(() => {
-    window.electronAPI.getSetting('retention_days').then((val) => {
-      if (val) setDays(val)
+    window.electronAPI.getSetting('retention_hours').then((val) => {
+      if (val) setHours(val)
     })
   }, [])
 
   async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value
-    setDays(value)
-    await window.electronAPI.setSetting('retention_days', value)
+    setHours(value)
+    await window.electronAPI.setSetting('retention_hours', value)
   }
 
   return (
-    <select className="retention-select" value={days} onChange={handleChange}>
+    <select className="retention-select" value={hours} onChange={handleChange}>
       {OPTIONS.map((opt) => (
         <option key={opt.value} value={opt.value}>
           {opt.label}

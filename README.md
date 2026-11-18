@@ -28,7 +28,7 @@
 | 一键复制 | **点击卡片 = 直接把这条件放回剪贴板**，右下角弹「已复制」提示 |
 | 置顶 | 把常用片段钉在顶部，不受时间排序影响 |
 | 搜索 | 输入关键词即时过滤，支持中文 |
-| 保留时长 | 1 天 / 3 天 / 7 天 / 15 天 / 30 天 / 永久，超期自动清理 |
+| 保留时长 | **2 小时 / 4 小时 / 6 小时 / 1 天 / 3 天 / 7 天 / 永久**，按小时定时清理，置顶记录永不清理 |
 | 悬浮球 | 桌面常驻一颗带呼吸光环的小球（粒子爆炸 + 3.4s 呼吸），点一下唤出面板 |
 | 托盘常驻 | 托盘图标 + 右键菜单，关掉窗口也不丢功能 |
 | 全局快捷键 | `Ctrl + Shift + V` 随时唤出面板 |
@@ -41,15 +41,15 @@
 
 ### 方式一：下载压缩包（推荐）
 
-到 [Releases](https://github.com/tailande8866-hub/clipboard-history-xiaoming/releases/latest) 下载最新的 `ClipStack-*-x64.zip`，解压到任意目录（例如 `D:\ClipStack`），双击 `剪贴栈.exe` 即可运行，无需安装。
+到 [Releases](https://github.com/tailande8866-hub/ClipStack/releases/latest) 下载最新的 `ClipStack-*-x64.zip`，解压到任意目录（例如 `D:\ClipStack`），双击 `剪贴栈.exe` 即可运行，无需安装。
 
 > 首次启动 Windows SmartScreen 可能提示「未知发布者」，点「更多信息 → 仍要运行」即可（个人项目没有代码签名证书）。
 
 ### 方式二：从源码运行
 
 ```powershell
-git clone https://github.com/tailande8866-hub/clipboard-history-xiaoming.git
-cd clipboard-history-xiaoming
+git clone https://github.com/tailande8866-hub/ClipStack.git
+cd ClipStack
 npm install
 npm run dev
 ```
@@ -61,7 +61,7 @@ npm run dev
 1. 启动后会看到桌面上的悬浮球（或托盘图标），左键点球唤出面板。
 2. 面板里从上到下就是你的历史：**最新的在最上面**。
 3. 想取回某条 → 点卡片；想留个位置 → 点图钉置顶；不想要了 → 点垃圾桶，**一次点击直接删除**（不再二次确认）。
-4. 顶部「1天」那个下拉是保留时长；齿轮进设置，`—` 是最小化。
+4. 顶部那个下拉是保留时长（最短 2 小时，可选永久）；齿轮进设置，`—` 是最小化。
 5. 快捷键 `Ctrl + Shift + V` 可以不用点球直接唤出。
 
 ## 数据
@@ -100,7 +100,7 @@ npx electron-builder --win zip   # 便携压缩包 → dist\ClipStack-1.2.0-x64.
 
 ## 反馈
 
-- GitHub Issues：<https://github.com/tailande8866-hub/clipboard-history-xiaoming/issues>
+- GitHub Issues：<https://github.com/tailande8866-hub/ClipStack/issues>
 - 邮箱：duanmwsj@qq.com
 - QQ：913838378
 

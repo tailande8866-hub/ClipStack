@@ -56,12 +56,30 @@ const EDGE_MARGIN = 16
 app.setPath('userData', join(app.getPath('appData'), 'clipboard-history'))
 
 // 反馈 / 更新相关常量
-const REPO = 'tailande8866-hub/clipboard-history-xiaoming'
+const REPO = 'tailande8866-hub/ClipStack'
 const REPO_URL = `https://github.com/${REPO}`
 const ISSUES_URL = `${REPO_URL}/issues`
 const LICENSE_URL = `${REPO_URL}/blob/master/LICENSE`
 const QQ_GROUP = '913838378'
 const CONTACT_EMAIL = 'duanmwsj@qq.com'
+
+// 保留时长：以小时为单位，0 表示永久
+function legacyRetentionHours(): string {
+  const legacyDays = getSetting('retention_days')
+  if (legacyDays) {
+    const h = parseInt(legacyDays, 10) * 24
+    if (Number.isFinite(h) && h >= 0) return String(h)
+  }
+  return '24'
+}
+
+function formatRetentionLabel(hoursStr: string): string {
+  const hours = parseInt(hoursStr, 10)
+  if (!Number.isFinite(hours) || hours <= 0) return '永久保留'
+  if (hours < 24) return `${hours} 小时`
+  const days = hours / 24
+  return Number.isInteger(days) ? `${days} 天` : `${hours} 小时`
+}
 const UPDATE_CHECK_TIMEOUT = 10000
 
 interface UpdateResult {
@@ -333,7 +351,7 @@ function dataDirInfo(): Record<string, unknown> {
     appPath: app.getAppPath(),
     autostart: app.getLoginItemSettings().openAtLogin,
     stats: getStats(),
-    retentionDays: getSetting('retention_days') || '3',
+    retentionHours: getSetting('retention_hours') || legacyRetentionHours(),
     autoCheckUpdate: getSetting('auto_check_update') !== '0',
     updateCheck: lastUpdateCheck,
     qqGroup: QQ_GROUP,
@@ -457,7 +475,7 @@ function buildDiagnosticsText(): string {
     `最新记录      : ${fmt(stats.newest)}`,
     '',
     '----- 设置 -----',
-    `保留时长      : ${getSetting('retention_days') || '3'} 天`,
+    `保留时长      : ${formatRetentionLabel(getSetting('retention_hours') || legacyRetentionHours())}`,
     `开机自启      : ${app.getLoginItemSettings().openAtLogin ? '开' : '关'}`,
     `自动检查更新  : ${getSetting('auto_check_update') !== '0' ? '开' : '关'}`,
     `呼出快捷键    : Ctrl+Shift+V`,
