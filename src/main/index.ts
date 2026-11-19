@@ -12,6 +12,7 @@ import {
   dialog,
   shell,
   clipboard,
+  powerMonitor,
 } from 'electron'
 import { isAbsolute, join, resolve } from 'path'
 import fs from 'fs'
@@ -149,6 +150,23 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     setMainWindow(null)
     mainWindow = null
+  })
+
+  // 页面卡住/渲染进程崩溃时自动重载，避免面板变成“点不动的空壳”
+  mainWindow.on('unresponsive', () => {
+    if (isQuitting) return
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload()
+  })
+  mainWindow.webContents.on('render-process-gone', () => {
+    if (isQuitting) return
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload()
+  })
+  // 每次显示都重新压到最上层，防止系统唤醒/切换后窗口被别的窗口盖住导致点击落空
+  mainWindow.on('show', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(true, 'floating')
+      mainWindow.setIgnoreMouseEvents(false)
+    }
   })
 
   if (process.env.NODE_ENV === 'development') {
@@ -715,6 +733,18 @@ app.whenReady().then(async () => {
   setTimeout(() => { blurHideReady = true }, 1500)
 
   globalShortcut.register('Ctrl+Shift+V', toggleWindow)
+
+  // 系统睡眠/锁屏唤醒后：窗口容易失去置顶并被"冻住"，这里把它重新拉回可交互状态
+  const recoverAfterWake = () => {
+    if (isQuitting) return
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+      mainWindow.setAlwaysOnTop(true, 'floating')
+      mainWindow.setIgnoreMouseEvents(false)
+      mainWindow.webContents.reload()
+    }
+  }
+  powerMonitor.on('resume', recoverAfterWake)
+  powerMonitor.on('unlock-screen', recoverAfterWake)
 
   // 开机后若开启"自动检查更新"，延迟静默检查一次
   if (getSetting('auto_check_update') !== '0') {
