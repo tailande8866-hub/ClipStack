@@ -9,24 +9,40 @@ interface Props {
 }
 
 export default function ClipboardCard({ item, onChanged }: Props) {
-  const [copied, setCopied] = useState(false)
+  const [toast, setToast] = useState('')
+
+  function flash(text: string) {
+    setToast(text)
+    window.setTimeout(() => setToast(''), 1600)
+  }
 
   async function handleCopy() {
-    const ok = await window.electronAPI.copyToClipboard(item.id)
-    if (ok) {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
+    try {
+      const ok = await window.electronAPI.copyToClipboard(item.id)
+      if (ok) flash('已复制')
+      else flash('复制失败')
+    } catch {
+      flash('复制失败')
     }
   }
 
   async function handlePin() {
-    await window.electronAPI.pinItem(item.id, !item.is_pinned)
-    onChanged()
+    try {
+      await window.electronAPI.pinItem(item.id, !item.is_pinned)
+      flash(item.is_pinned ? '已取消置顶' : '已置顶')
+      onChanged()
+    } catch {
+      flash('操作失败')
+    }
   }
 
   async function handleDelete() {
-    await window.electronAPI.deleteItem(item.id)
-    onChanged()
+    try {
+      await window.electronAPI.deleteItem(item.id)
+      onChanged()
+    } catch {
+      flash('删除失败')
+    }
   }
 
   return (
@@ -34,7 +50,7 @@ export default function ClipboardCard({ item, onChanged }: Props) {
       {item.type === 'text' ? <TextCard item={item} onCopy={handleCopy} /> : <ImageCard item={item} onCopy={handleCopy} />}
 
       <div className="card-actions">
-        {copied && <span className="copy-toast">已复制</span>}
+        {toast && <span className="copy-toast">{toast}</span>}
         <button className="action-btn" title="复制" onClick={handleCopy}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="9" y="9" width="13" height="13" rx="2" />
