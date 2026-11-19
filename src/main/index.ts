@@ -141,10 +141,9 @@ function createWindow(): void {
 
   mainWindow.on('blur', () => {
     if (isQuitting) return
-    if (blurHideReady && mainWindow && !mainWindow.isDestroyed()) {
-      // 失焦只隐藏面板，不弹悬浮球；悬浮球仅在主动"收起"时出现
-      mainWindow.hide()
-    }
+    // 以前这里会在失焦时自动隐藏，但透明无边框窗口隐藏后偶尔会在屏幕上留下残影：
+    // 面板看着还在，鼠标点上去却落到桌面，表现为“点什么都没反应”。
+    // 现在不自动隐藏，只在用户主动收起（悬浮球按钮/快捷键/托盘）时才隐藏。
   })
 
   mainWindow.on('closed', () => {
@@ -259,10 +258,24 @@ function createSettingsWindow(): void {
 }
 
 /** 收起主面板，只留下右下角悬浮小球 */
+function hideMainPanel(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  // 透明无边框窗口直接 hide() 后，Windows 合成层有时会在屏幕上留下残影：
+  // 面板看着还在，但鼠标点上去其实落在桌面（表现为“点什么都没反应”）。
+  // 先把透明度压到 0 再隐藏，强制 DWM 重新合成，然后恢复透明度供下次显示使用。
+  try {
+    mainWindow.setOpacity(0)
+    mainWindow.hide()
+    mainWindow.setOpacity(1)
+  } catch {
+    if (!mainWindow.isDestroyed()) mainWindow.hide()
+  }
+}
+
 function collapseToFloat(): void {
   if (isQuitting) return
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
-    mainWindow.hide()
+    hideMainPanel()
   }
   showFloat()
 }
@@ -287,6 +300,8 @@ function expandFromFloat(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   const { x, y } = getWindowPosition()
   mainWindow.setPosition(x, y)
+  mainWindow.setOpacity(1)
+  mainWindow.setIgnoreMouseEvents(false)
   mainWindow.show()
   mainWindow.focus()
   blurHideReady = false
@@ -769,6 +784,7 @@ app.on('before-quit', () => {
 
 app.on('activate', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setOpacity(1)
     mainWindow.show()
   }
 })
