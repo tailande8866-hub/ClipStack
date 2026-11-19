@@ -308,7 +308,11 @@ function expandFromFloat(): void {
   mainWindow.setOpacity(1)
   mainWindow.setIgnoreMouseEvents(false)
   mainWindow.show()
+  // Windows 会限制后台程序抢前台，导致面板刚弹出时第一下点击只用来"激活窗口"
+  // （表现就是"刚打开那一瞬间点不动"）。steal 强制把应用拉前台，show 后立即聚焦。
+  app.focus({ steal: true })
   mainWindow.focus()
+  mainWindow.webContents.focus()
   blurHideReady = false
   setTimeout(() => { blurHideReady = true }, 1500)
 }
