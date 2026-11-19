@@ -206,6 +206,11 @@ function createFloatWindow(): void {
     floatWindow = null
   })
 
+  // 启动后要能看到悬浮球（主面板不自动弹出）
+  floatWindow.once('ready-to-show', () => {
+    showFloat()
+  })
+
   if (process.env.NODE_ENV === 'development') {
     floatWindow.loadURL('http://localhost:5173/float.html')
   } else {
