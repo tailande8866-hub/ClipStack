@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import './App.css'
 import { useClipboardHistory } from './hooks/useClipboardHistory'
 import SearchBar from './components/SearchBar'
@@ -16,6 +16,27 @@ const IconGear = () => (
 export default function App() {
   const [search, setSearch] = useState('')
   const { items, refresh } = useClipboardHistory(search)
+  const probeRef = useRef<HTMLButtonElement>(null)
+  const aliveRef = useRef(false)
+
+  // 自愈探针：长时间运行后 React 事件可能莫名失效（点哪都没反应），
+  // 每 20 秒用一次隐藏按钮点击验证，失效就自动重载页面把事件重新挂上。
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.hidden) return
+      aliveRef.current = false
+      probeRef.current?.click()
+      window.setTimeout(() => {
+        if (aliveRef.current) return
+        const last = Number(sessionStorage.getItem('ui-reload-at') || 0)
+        if (Date.now() - last < 60000) return
+        sessionStorage.setItem('ui-reload-at', String(Date.now()))
+        console.warn('[self-heal] 检测到点击无响应，自动重载界面')
+        location.reload()
+      }, 400)
+    }, 20000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const handleSearch = useCallback((query: string) => {
     setSearch(query)
@@ -103,6 +124,17 @@ export default function App() {
       <div className="list-area">
         {items.length === 0 ? <EmptyState /> : <ClipboardList items={items} onChanged={refresh} />}
       </div>
+
+      <button
+        ref={probeRef}
+        aria-hidden="true"
+        tabIndex={-1}
+        className="event-probe"
+        onClick={() => {
+          aliveRef.current = true
+          document.documentElement.dataset.uiAlive = String(Date.now())
+        }}
+      />
     </>
   )
 }
