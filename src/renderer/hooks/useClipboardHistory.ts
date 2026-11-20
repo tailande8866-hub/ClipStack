@@ -34,9 +34,14 @@ export function useClipboardHistory(search?: string) {
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onNewItem((item) => {
-      if (!searchRef.current) {
-        setItems((prev) => sortItems([item, ...prev]))
+      if (searchRef.current) return
+      const id = Number((item as { id?: unknown } | null)?.id)
+      // 兜底：万一收到的 id 无效（0/NaN），不插假卡片，直接回库重查
+      if (!Number.isFinite(id) || id <= 0) {
+        refresh()
+        return
       }
+      setItems((prev) => sortItems([item, ...prev]))
     })
     const unsubscribeData = window.electronAPI.onDataChanged(() => {
       refresh()

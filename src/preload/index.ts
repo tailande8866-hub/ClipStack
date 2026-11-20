@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyToClipboard: (id: number) =>
     ipcRenderer.invoke('clipboard:copy', id),
 
+  diagLog: (msg: string) =>
+    ipcRenderer.invoke('diag:log', msg),
+
   pinItem: (id: number, pinned: boolean) =>
     ipcRenderer.invoke('history:pin', id, pinned),
 
@@ -35,6 +38,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showFloatMenu: () => ipcRenderer.send('window:menu'),
 
   setFloatIgnore: (ignore: boolean) => ipcRenderer.send('float:ignore', ignore),
+
+  dragFloatBy: (dx: number, dy: number) => ipcRenderer.send('float:drag', dx, dy),
+
+  startFloatDrag: () => ipcRenderer.send('float:drag-start'),
+
+  endFloatDrag: () => ipcRenderer.send('float:drag-end'),
+
+  cancelFloatDrag: () => ipcRenderer.send('float:drag-cancel'),
+
+  saveFloatPos: () => ipcRenderer.send('float:save-pos'),
 
   quitApp: () => ipcRenderer.send('app:quit'),
 
@@ -81,4 +94,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update:available', listener)
     return () => ipcRenderer.removeListener('update:available', listener)
   },
+
+  dismissUpdate: (version: string) => ipcRenderer.invoke('update:dismiss', version),
 })

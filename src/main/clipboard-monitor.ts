@@ -22,6 +22,15 @@ export function onNewItem(cb: (item: ClipboardItem) => void): void {
   onNewItemCallback = cb
 }
 
+/** 从面板里复制一条历史时，把内容标记成"已处理"，避免又当成新剪贴内容记一遍 */
+export function markTextAsHandled(text: string): void {
+  lastTextHash = hashDjb2(text)
+}
+
+export function markImageAsHandled(md5: string): void {
+  lastImageHash = md5
+}
+
 function hashDjb2(str: string): string {
   let hash = 5381
   for (let i = 0; i < str.length; i++) {

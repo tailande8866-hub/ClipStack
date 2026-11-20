@@ -5,6 +5,7 @@ import SearchBar from './components/SearchBar'
 import RetentionSelector from './components/RetentionSelector'
 import ClipboardList from './components/ClipboardList'
 import EmptyState from './components/EmptyState'
+import { subscribeToast } from './toast'
 
 const IconGear = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
@@ -18,6 +19,51 @@ export default function App() {
   const { items, refresh } = useClipboardHistory(search)
   const probeRef = useRef<HTMLButtonElement>(null)
   const aliveRef = useRef(false)
+  const [toastMsg, setToastMsg] = useState('')
+  const toastTimer = useRef(0)
+
+  // 新版本提示：新版本发布后，第一次启动会在面板顶部弹一张"更新内容"卡
+  type UpdateInfo = {
+    hasUpdate: boolean
+    seen: boolean
+    current: string
+    latest: string | null
+    notes: string | null
+    url: string | null
+    publishedAt?: string | null
+  }
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+
+  useEffect(() => {
+    const api = window.electronAPI as unknown as {
+      getUpdateStatus?: () => Promise<UpdateInfo | null>
+      onUpdateAvailable?: (cb: (info: UpdateInfo) => void) => () => void
+      dismissUpdate?: (v: string) => Promise<boolean>
+      openExternal?: (url: string) => Promise<unknown>
+    }
+    api.getUpdateStatus?.().then((u) => {
+      if (u && u.hasUpdate && !u.seen) setUpdateInfo(u)
+    }).catch(() => { /* 静默 */ })
+    const off = api.onUpdateAvailable?.((u) => {
+      if (u && u.hasUpdate) setUpdateInfo(u)
+    })
+    return () => { off?.() }
+  }, [])
+
+  function dismissUpdate() {
+    const v = updateInfo?.latest
+    setUpdateInfo(null)
+    if (v) (window.electronAPI as unknown as { dismissUpdate?: (v: string) => void }).dismissUpdate?.(v)
+  }
+
+  // 操作反馈统一走全局提示，卡片因为列表刷新重排而丢 state 也不会漏提示
+  useEffect(() => {
+    return subscribeToast((msg) => {
+      setToastMsg(msg)
+      window.clearTimeout(toastTimer.current)
+      toastTimer.current = window.setTimeout(() => setToastMsg(''), 2200)
+    })
+  }, [])
 
   // 自愈探针：长时间运行后 React 事件可能莫名失效（点哪都没反应），
   // 每 20 秒用一次隐藏按钮点击验证，失效就自动重载页面把事件重新挂上。
@@ -49,10 +95,9 @@ export default function App() {
     const update = (x: number, y: number) => {
       document.querySelectorAll<HTMLElement>('.clipboard-card').forEach((card) => {
         const r = card.getBoundingClientRect()
-        const cx = r.left + r.width / 2
-        const cy = r.top + r.height / 2
-        const d = Math.hypot(x - cx, y - cy)
-        card.classList.toggle('near', d < Math.max(r.width, r.height) / 2 + 56)
+        // 只有指针真的落在卡片上（含 4px 容差）才亮，避免"没碰到也有反应"
+        const inside = x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4
+        card.classList.toggle('near', inside)
       })
     }
 
@@ -121,9 +166,42 @@ export default function App() {
 
       <SearchBar onSearch={handleSearch} />
 
+      {updateInfo && (
+        <div className="update-card">
+          <div className="update-head">
+            <span className="update-dot" aria-hidden="true" />
+            <strong>发现新版本 v{updateInfo.latest}</strong>
+            <span className="update-cur">当前 v{updateInfo.current}</span>
+            <button className="update-close" title="关闭" onClick={dismissUpdate}>×</button>
+          </div>
+          <div className="update-notes">
+            {(updateInfo.notes || '（这次更新没有写说明，可以直接下载新版）')
+              .replace(/\r/g, '')
+              .split('\n')
+              .filter((line) => line.trim())
+              .slice(0, 12)
+              .map((line, i) => (
+                <p key={i}>{line.replace(/^#+\s*/, '').replace(/\*\*/g, '').replace(/^[-*]\s*/, '· ')}</p>
+              ))}
+          </div>
+          <div className="update-actions">
+            <button
+              className="update-btn"
+              onClick={() => updateInfo.url && window.electronAPI.openExternal(updateInfo.url)}
+            >
+              去下载新版
+            </button>
+            <button className="update-btn ghost" onClick={dismissUpdate}>
+              知道了
+            </button>
+          </div>
+        </div>
+      )}
       <div className="list-area">
         {items.length === 0 ? <EmptyState /> : <ClipboardList items={items} onChanged={refresh} />}
       </div>
+
+      {toastMsg && <div className="global-toast">{toastMsg}</div>}
 
       <button
         ref={probeRef}

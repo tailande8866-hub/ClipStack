@@ -127,10 +127,12 @@ export function getHistory(search?: string, limit = 50, offset = 0): ClipboardIt
 export function addText(text: string): ClipboardItem {
   const now = Date.now()
   db!.run('INSERT INTO clipboard_history (type, content, created_at) VALUES (?, ?, ?)', ['text', text, now])
-  save()
 
+  // 注意顺序：sql.js 的 export() 会关库重开，必须先取 rowid 再落盘，
+  // 否则 last_insert_rowid() 会被重置成 0（新卡片 id=0 导致复制/置顶/删除全部失效）
   const result = db!.exec('SELECT last_insert_rowid() as id')
   const id = result[0].values[0][0] as number
+  save()
 
   return {
     id,
@@ -149,10 +151,10 @@ export function addImage(imagePath: string, imageHash: string): ClipboardItem {
     'INSERT INTO clipboard_history (type, image_path, image_hash, created_at) VALUES (?, ?, ?, ?)',
     ['image', imagePath, imageHash, now],
   )
-  save()
 
   const result = db!.exec('SELECT last_insert_rowid() as id')
   const id = result[0].values[0][0] as number
+  save()
 
   return {
     id,

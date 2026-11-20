@@ -8,9 +8,9 @@
   --surface-hover: rgba(255, 255, 255, 0.15);
   --stroke: rgba(255, 255, 255, 0.20);
   --stroke-strong: rgba(255, 255, 255, 0.34);
-  --text: #F4F8FF;
-  --text-2: #C0CEE3;
-  --text-3: #8E9EB6;
+  --text: #F7FAFF;
+  --text-2: #CBD8EB;
+  --text-3: #9FAEC4;
   --accent: #7FB6FF;
   --accent-soft: #A9D4FF;
   --accent-mint: #8FE6DD;
@@ -54,14 +54,14 @@ html, body, #root {
   border: 1px solid rgba(255, 255, 255, 0.10);
   overflow: hidden;
   background:
-    radial-gradient(80% 55% at 6% -12%, rgba(96, 168, 255, 0.42) 0%, rgba(96, 168, 255, 0) 62%),
-    radial-gradient(75% 55% at 100% 108%, rgba(160, 128, 255, 0.36) 0%, rgba(160, 128, 255, 0) 64%),
-    radial-gradient(40% 30% at 88% 6%, rgba(120, 230, 240, 0.20) 0%, rgba(120, 230, 240, 0) 70%),
-    linear-gradient(180deg, #1B2434 0%, #161D2B 46%, #131A27 100%);
+    radial-gradient(80% 55% at 6% -12%, rgba(80, 140, 226, 0.26) 0%, rgba(80, 140, 226, 0) 62%),
+    radial-gradient(75% 55% at 100% 108%, rgba(132, 104, 226, 0.24) 0%, rgba(132, 104, 226, 0) 64%),
+    radial-gradient(40% 30% at 88% 6%, rgba(96, 196, 208, 0.12) 0%, rgba(96, 196, 208, 0) 70%),
+    linear-gradient(180deg, #151B26 0%, #111620 46%, #0D121B 100%);
   /* 不再使用大范围黑色外投影：半透明窗口里它会被窗口边界硬切成方形暗底 */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 0 40px rgba(120, 170, 255, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 40px rgba(100, 150, 235, 0.05);
 }
 
 /* 磨砂颗粒：透过玻璃可见的细腻噪点 */
@@ -229,17 +229,20 @@ html, body, #root {
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 
 .brand h1 {
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
-  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #FFFFFF;
+  text-shadow: 0 1px 3px rgba(0, 4, 12, 0.62), 0 0 12px rgba(140, 190, 255, 0.22);
 }
 
 .brand-sub {
-  font-size: 9px;
-  letter-spacing: 1.2px;
-  color: rgba(206, 222, 244, 0.92);
-  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 1.3px;
+  color: rgba(232, 243, 255, 0.97);
+  text-shadow: 0 1px 2px rgba(0, 4, 12, 0.55);
+  margin-top: 3px;
 }
 
 .header-actions {
@@ -251,12 +254,13 @@ html, body, #root {
 
 .retention-select {
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: 11px;
+  font-weight: 600;
   padding: 3px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.065);
+  color: #EAF3FF;
   cursor: pointer;
   outline: none;
   backdrop-filter: blur(14px);
@@ -280,10 +284,10 @@ html, body, #root {
   width: 25px;
   height: 25px;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(232, 242, 255, 0.92);
+  background: rgba(255, 255, 255, 0.095);
+  color: #F2F8FF;
   cursor: pointer;
   transition: background 160ms var(--ease), color 160ms var(--ease), border-color 160ms var(--ease);
 }
@@ -318,19 +322,20 @@ html, body, #root {
 .search-input {
   width: 100%;
   padding: 7.5px 28px 7.5px 28px;
-  border: 1px solid var(--stroke);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 11px;
   font-family: inherit;
-  font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.055);
+  font-size: 12.2px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.075);
   backdrop-filter: blur(20px) saturate(175%) brightness(1.05);
   -webkit-backdrop-filter: blur(20px) saturate(175%) brightness(1.05);
-  color: var(--text);
+  color: #FFFFFF;
   outline: none;
   transition: border-color 170ms var(--ease), background 170ms var(--ease), box-shadow 170ms var(--ease);
 }
 
-.search-input::placeholder { color: var(--text-3); }
+.search-input::placeholder { color: rgba(212, 228, 248, 0.92); font-weight: 500; }
 
 .search-input:focus {
   border-color: rgba(127, 182, 255, 0.55);
@@ -362,6 +367,111 @@ html, body, #root {
 
 .search-clear:hover { color: var(--accent); }
 
+/* 新版本提示卡（面板打开时若发现有新版本，第一次会弹这张） */
+.update-card {
+  position: relative;
+  margin: 0 11px 9px;
+  padding: 9px 10px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(150, 200, 255, 0.42);
+  background: linear-gradient(135deg, rgba(108, 158, 236, 0.22) 0%, rgba(12, 22, 40, 0.55) 55%, rgba(140, 120, 230, 0.18) 100%);
+  box-shadow: 0 6px 18px rgba(4, 10, 22, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(18px) saturate(160%);
+  flex-shrink: 0;
+  animation: update-in 260ms var(--ease);
+}
+
+@keyframes update-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.update-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.update-head strong {
+  font-size: 11.6px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #FFFFFF;
+}
+
+.update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7FE6C0;
+  box-shadow: 0 0 8px rgba(127, 230, 192, 0.85);
+  flex-shrink: 0;
+}
+
+.update-cur {
+  font-size: 9.5px;
+  color: rgba(200, 220, 244, 0.75);
+  letter-spacing: 0.3px;
+}
+
+.update-close {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(232, 243, 255, 0.9);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.update-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+.update-notes {
+  max-height: 92px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.update-notes p {
+  margin: 0 0 3px;
+  font-size: 10.6px;
+  line-height: 1.55;
+  color: rgba(226, 238, 252, 0.9);
+  word-break: break-word;
+}
+
+.update-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.update-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(180, 220, 255, 0.55);
+  background: linear-gradient(150deg, rgba(120, 186, 255, 0.85) 0%, rgba(148, 160, 255, 0.8) 100%);
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(20, 60, 120, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.update-btn.ghost {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(232, 244, 255, 0.92);
+  box-shadow: none;
+}
+
 /* ============ 列表 ============ */
 .list-area {
   position: relative;
@@ -377,19 +487,18 @@ html, body, #root {
 .clipboard-card {
   position: relative;
   background:
-    linear-gradient(135deg, rgba(120, 170, 245, 0.18) 0%, rgba(20, 30, 50, 0.16) 45%, rgba(140, 122, 235, 0.16) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.26);
+    linear-gradient(135deg, rgba(108, 158, 236, 0.11) 0%, rgba(10, 18, 34, 0.24) 45%, rgba(124, 108, 220, 0.10) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--radius);
   overflow: hidden;
-  backdrop-filter: blur(26px) saturate(185%) brightness(1.0);
-  -webkit-backdrop-filter: blur(26px) saturate(185%) brightness(1.0);
+  backdrop-filter: blur(26px) saturate(170%) brightness(0.86);
+  -webkit-backdrop-filter: blur(26px) saturate(170%) brightness(0.86);
   box-shadow:
-    0 8px 18px rgba(4, 9, 20, 0.26),
-    0 0 0 1px rgba(255, 255, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.20),
-    inset 0 0 26px rgba(140, 190, 255, 0.12),
-    inset 0 -14px 22px rgba(150, 130, 255, 0.10);
+    0 8px 18px rgba(2, 5, 14, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30),
+    inset 0 0 26px rgba(120, 170, 245, 0.07);
   transition: background 190ms var(--ease), border-color 190ms var(--ease),
               transform 190ms var(--ease), box-shadow 190ms var(--ease);
 }
@@ -401,10 +510,10 @@ html, body, #root {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(80% 60% at 14% -14%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 62%),
-    radial-gradient(60% 50% at 92% 116%, rgba(170, 210, 255, 0.22) 0%, rgba(170, 210, 255, 0) 68%);
+    radial-gradient(80% 60% at 14% -14%, rgba(255, 255, 255, 0.20) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(60% 50% at 92% 116%, rgba(160, 200, 255, 0.14) 0%, rgba(160, 200, 255, 0) 68%);
   mix-blend-mode: screen;
-  opacity: 0.85;
+  opacity: 0.62;
   animation: card-glow 6.5s ease-in-out infinite;
 }
 
@@ -420,34 +529,36 @@ html, body, #root {
   background-size: 120px 120px;
 }
 
+/* 鼠标移上来只亮边框，框里的东西一点不动（不换底色、不位移、文字不变） */
 .clipboard-card:hover {
-  background: var(--surface-hover);
-  border-color: rgba(127, 182, 255, 0.42);
-  transform: translateY(-1px);
+  border-color: rgba(127, 182, 255, 0.55);
   box-shadow:
-    0 12px 30px rgba(2, 6, 16, 0.46),
-    0 0 22px rgba(127, 182, 255, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    0 8px 18px rgba(2, 5, 14, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.10),
+    0 0 22px rgba(127, 182, 255, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30),
+    inset 0 0 26px rgba(120, 170, 245, 0.07);
 }
-
-.clipboard-card:hover .card-actions { opacity: 1; }
 
 /* 文字卡 */
 .text-card { padding: 9.5px 10.5px 7px; cursor: pointer; }
 
+/* 文字卡：默认朦胧，鼠标碰到哪张哪张才亮起来 */
 .text-card-content {
-  font-size: 12.5px;
+  font-size: 11.8px;
   font-weight: 500;
-  line-height: 1.55;
-  color: #FFFFFF;
-  text-shadow: 0 1px 2px rgba(3, 8, 18, 0.42);
+  line-height: 1.52;
+  letter-spacing: 0.1px;
   white-space: pre-wrap;
   word-break: break-all;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  color: var(--text);
+  color: rgba(216, 228, 244, 0.74);
+  filter: blur(0.3px);
+  text-shadow: none;
 }
 
 .text-card-footer {
@@ -459,9 +570,11 @@ html, body, #root {
 
 .text-card-time {
   font-size: 10.5px;
-  letter-spacing: 0.2px;
-  color: rgba(238, 246, 255, 0.96);
-  text-shadow: 0 1px 2px rgba(3, 8, 18, 0.5);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: rgba(214, 226, 242, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 4, 12, 0.6);
+  transition: color 190ms var(--ease);
 }
 
 .pin-badge {
@@ -508,8 +621,7 @@ html, body, #root {
   align-items: center;
   gap: 5px;
   padding: 0 8px 8px;
-  opacity: 0.9;
-  transition: opacity 170ms var(--ease);
+  opacity: 0.82;
 }
 
 .copy-toast {
@@ -523,6 +635,146 @@ html, body, #root {
   border: 1px solid rgba(200, 226, 255, 0.45);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   animation: toast-in 180ms var(--ease);
+}
+
+.global-toast {
+  position: fixed;
+  left: 50%;
+  top: 30px;
+  transform: translateX(-50%);
+  padding: 7px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  border-radius: 20px;
+  color: #FFFFFF;
+  background: linear-gradient(140deg, rgba(110, 170, 255, 0.82) 0%, rgba(154, 132, 255, 0.78) 100%);
+  border: 1px solid rgba(230, 242, 255, 0.75);
+  box-shadow: 0 10px 26px rgba(10, 24, 46, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  text-shadow: 0 1px 2px rgba(18, 36, 68, 0.45);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  z-index: 80;
+  animation: toast-in 180ms var(--ease);
+}
+
+.clipboard-card.copied-flash {
+  box-shadow: 0 0 0 1px rgba(175, 220, 255, 0.9), 0 0 24px rgba(127, 182, 255, 0.55);
+  transition: box-shadow 220ms var(--ease);
+}
+
+.clipboard-card.pinned-flash {
+  box-shadow: 0 0 0 1px rgba(255, 226, 170, 0.85), 0 0 22px rgba(255, 198, 120, 0.42);
+  transition: box-shadow 220ms var(--ease);
+}
+
+/* 复制/置顶/取消置顶 统一在卡片右上角同一个位置给反馈 */
+.copy-badge {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: #F4FCFF;
+  background: linear-gradient(140deg, rgba(92, 198, 255, 0.95) 0%, rgba(124, 158, 255, 0.92) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 12px rgba(16, 78, 148, 0.42), 0 0 14px rgba(130, 200, 255, 0.62);
+  pointer-events: none;
+  animation: badge-in 240ms var(--ease);
+}
+
+.copy-badge.badge-pin {
+  color: #FFF6E6;
+  background: linear-gradient(140deg, rgba(255, 206, 120, 0.95) 0%, rgba(246, 168, 112, 0.92) 100%);
+  border-color: rgba(255, 246, 226, 0.85);
+  box-shadow: 0 4px 12px rgba(120, 70, 12, 0.38), 0 0 14px rgba(255, 198, 120, 0.58);
+}
+
+/* 删除：外框先淡掉，里面的内容再化成细沙一样的微粒散走；
+   同时卡片高度一边散一边往下收，下面的卡片是平滑被顶上来的，不是最后猛一跳 */
+.clipboard-card.deleting {
+  animation: card-dissolve 260ms ease-out forwards, card-collapse 1400ms 150ms cubic-bezier(0.4, 0, 0.55, 1) forwards;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+@keyframes card-collapse {
+  0%   { height: var(--dh, 200px); margin-bottom: 0; }
+  100% { height: 0; margin-bottom: -8px; }
+}
+
+.clipboard-card.deleting > .text-card,
+.clipboard-card.deleting > .image-card,
+.clipboard-card.deleting > .card-actions {
+  animation: content-dissolve 950ms ease-out 180ms forwards;
+  animation-fill-mode: both;
+}
+
+@keyframes card-dissolve {
+  0%   { opacity: 1; }
+  40%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+@keyframes content-dissolve {
+  0%   { opacity: 1; filter: blur(0); }
+  55%  { opacity: 0.4; filter: blur(1.6px); }
+  100% { opacity: 0; filter: blur(3px); }
+}
+
+.dissolve-layer {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.dissolve-dot {
+  position: absolute;
+  left: var(--px, 50%);
+  top: var(--py, 62%);
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: var(--dot-hue);
+  box-shadow: 0 0 4px var(--dot-hue);
+  opacity: 0;
+  animation: dot-fly var(--dur, 900ms) cubic-bezier(0.22, 0.35, 0.4, 1) var(--delay) forwards;
+}
+
+/* 细沙一样的微粒：一出现就亮，边飘边淡 */
+@keyframes dot-fly {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  14%  { opacity: 0.95; transform: translate(-50%, -50%) scale(0.85); }
+  60%  { opacity: 0.5; transform: translate(calc(-50% + var(--tx) * 0.55), calc(-50% + var(--ty) * 0.55)) scale(0.6); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.35); }
+}
+
+@keyframes badge-in {
+  from { opacity: 0; transform: translateY(-5px) scale(0.88); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 复制按钮原地变成对勾，眼睛就在按钮上，不用去看顶部提示 */
+.action-btn.action-btn-copied {
+  background: linear-gradient(150deg, rgba(120, 210, 255, 0.95) 0%, rgba(150, 165, 255, 0.92) 100%);
+  border-color: rgba(255, 255, 255, 0.85);
+  color: #FFFFFF;
+  box-shadow: 0 0 12px rgba(140, 200, 255, 0.75);
+  animation: copied-pop 260ms var(--ease);
+}
+
+@keyframes copied-pop {
+  0% { transform: scale(0.86); }
+  55% { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
 @keyframes toast-in {
@@ -772,21 +1024,16 @@ html, body, #root {
 }
 
 
-/* ============ 卡片：鼠标靠近时发光（图3 效果） ============ */
+/* ============ 卡片：鼠标靠近时只亮边框（框里的内容不动） ============ */
 .clipboard-card.near {
-  border-color: rgba(175, 205, 255, 0.68);
-  transform: translateY(-1px) scale(1.006);
+  border-color: rgba(175, 205, 255, 0.72);
   box-shadow:
-    0 0 0 1px rgba(160, 196, 255, 0.50),
+    0 0 0 1px rgba(160, 196, 255, 0.55),
     0 8px 22px rgba(4, 9, 20, 0.42),
-    0 0 18px rgba(126, 178, 255, 0.42),
-    0 0 38px rgba(184, 142, 255, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.30),
-    inset 0 0 18px rgba(155, 200, 255, 0.14);
+    0 0 18px rgba(126, 178, 255, 0.46),
+    0 0 38px rgba(184, 142, 255, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 0 18px rgba(155, 200, 255, 0.12);
 }
 
-.clipboard-card.near::after {
-  animation: none;
-  opacity: 1;
-}
 .event-probe { position: fixed; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
