@@ -34,6 +34,7 @@ export default function App() {
   }
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [installing, setInstalling] = useState(false)
+  const [installError, setInstallError] = useState('')
   const [progress, setProgress] = useState<{ phase: string; percent?: number; received?: number; total?: number } | null>(null)
 
   useEffect(() => {
@@ -74,6 +75,7 @@ export default function App() {
     }
     setInstalling(true)
     setProgress(null)
+    setInstallError('')
     const r = await api.installUpdate?.()
     if (!r) {
       setInstalling(false)
@@ -82,9 +84,7 @@ export default function App() {
     if (!r.ok) {
       setInstalling(false)
       setProgress(null)
-      setToastMsg('更新失败：' + r.message)
-      window.clearTimeout(toastTimer.current)
-      toastTimer.current = window.setTimeout(() => setToastMsg(''), 4000)
+      setInstallError(r.message || '更新失败')
     }
     // ok 时主进程会在几百毫秒后自行退出并重启，这里不做额外处理
   }
@@ -241,6 +241,7 @@ export default function App() {
               知道了
             </button>
           </div>
+          {installError && <div className="update-error">更新失败：{installError}</div>}
         </div>
       )}
       <div className="list-area">

@@ -712,25 +712,48 @@ async function installUpdate(): Promise<{ ok: boolean; message: string }> {
     await fs.promises.mkdir(workDir, { recursive: true })
 
     sendUpdateProgress({ phase: 'download', received: 0, total: info.assetSize || 0, percent: 0 })
-    const res = await net.fetch(info.assetUrl, { headers: { 'User-Agent': 'xiaoming-clipboard' } })
-    if (!res.ok || !res.body) throw new Error(`下载失败（HTTP ${res.status}）`)
-    const total = Number(res.headers.get('content-length') || info.assetSize || 0)
+    // GitHub 在国内经常被重置，失败就重试几次
     let received = 0
-    const rs = Readable.fromWeb(res.body as any)
-    rs.on('data', (chunk: Buffer) => {
-      received += chunk.length
-      const percent = total ? Math.min(98, Math.round((received / total) * 100)) : 0
-      sendUpdateProgress({ phase: 'download', received, total, percent })
-    })
-    await pipeline(rs, fs.createWriteStream(zipPath))
-    if (received === 0) throw new Error('下载到的文件是空的，网络可能被拦截')
+    let lastErr: Error | null = null
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        received = 0
+        const res = await net.fetch(info.assetUrl, { headers: { 'User-Agent': 'xiaoming-clipboard' } })
+        if (!res.ok || !res.body) throw new Error(`下载失败（HTTP ${res.status}）`)
+        const total = Number(res.headers.get('content-length') || info.assetSize || 0)
+        const rs = Readable.fromWeb(res.body as any)
+        rs.on('data', (chunk: Buffer) => {
+          received += chunk.length
+          const percent = total ? Math.min(98, Math.round((received / total) * 100)) : 0
+          sendUpdateProgress({ phase: 'download', received, total, percent })
+        })
+        await pipeline(rs, fs.createWriteStream(zipPath))
+        if (received === 0) throw new Error('下载到的文件是空的，网络可能被拦截')
+        if (info.assetSize && received < info.assetSize * 0.99) throw new Error('下载不完整')
+        lastErr = null
+        break
+      } catch (e) {
+        lastErr = e as Error
+        await fs.promises.rm(zipPath, { force: true })
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt))
+      }
+    }
+    if (lastErr) {
+      throw new Error(`下载失败（已重试 3 次）：${lastErr.message}。可以在设置里点「查看更新说明」手动下载。`)
+    }
 
     sendUpdateProgress({ phase: 'extract', percent: 99 })
     await fs.promises.mkdir(payloadDir, { recursive: true })
+    const tarExe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+    if (!fs.existsSync(tarExe)) throw new Error('系统里找不到 tar.exe，无法解压更新包')
     await new Promise<void>((resolveP, rejectP) => {
-      const proc = spawn('tar.exe', ['-xf', zipPath, '-C', payloadDir], { windowsHide: true })
+      const proc = spawn(tarExe, ['-xf', zipPath, '-C', payloadDir], { windowsHide: true })
+      let errText = ''
+      proc.stderr?.on('data', (chunk: Buffer) => { errText += chunk.toString() })
       proc.on('error', rejectP)
-      proc.on('close', (code) => (code === 0 ? resolveP() : rejectP(new Error(`解压失败（退出码 ${code}）`))))
+      proc.on('close', (code) =>
+        code === 0 ? resolveP() : rejectP(new Error(`解压失败（退出码 ${code}）${errText ? '：' + errText.trim() : ''}`))
+      )
     })
 
     const exeName = basename(app.getPath('exe'))
@@ -756,14 +779,30 @@ async function installUpdate(): Promise<{ ok: boolean; message: string }> {
     await fs.promises.writeFile(ps1Path, '\ufeff' + script, 'utf-8')
 
     sendUpdateProgress({ phase: 'apply', percent: 100 })
-    spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ps1Path], {
+    const psExe = join(
+      process.env.SystemRoot || 'C:\\Windows',
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe'
+    )
+    if (!fs.existsSync(psExe)) throw new Error('系统里找不到 powershell.exe')
+    const logFd = fs.openSync(join(workDir, 'apply.log'), 'a')
+    const child = spawn(psExe, ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ps1Path], {
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', logFd, logFd],
       windowsHide: true,
-    }).unref()
+    })
+    child.unref()
     setTimeout(() => app.quit(), 700)
     return { ok: true, message: '已下载完成，正在后台替换文件，几秒后会自动重启' }
   } catch (err) {
+    try {
+      await fs.promises.rm(zipPath, { force: true })
+    } catch { /* ignore */ }
+    try {
+      await fs.promises.rm(workDir, { recursive: true, force: true })
+    } catch { /* ignore */ }
     return { ok: false, message: (err as Error).message || '更新失败' }
   }
 }

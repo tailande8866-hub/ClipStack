@@ -44,6 +44,39 @@ function notesFor(notes: string | null | undefined, max = 4): string[] {
   return lines.slice(0, max)
 }
 
+function formatReleaseDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** 把 Release 正文拆成可渲染的行：标题 / 要点 / 段落 */function notesBlocks(notes: string | null | undefined): Array<{ kind: 'h' | 'li' | 'p'; text: string }> {
+  if (!notes) return []
+  const out: Array<{ kind: 'h' | 'li' | 'p'; text: string }> = []
+  for (const raw of notes.replace(/\r/g, '').split('\n')) {
+    const line = raw.trimEnd()
+    if (!line.trim()) continue
+    if (/^[-*_]{3,}$/.test(line.trim())) continue
+    const clean = line
+      .replace(/\*\*/g, '')
+      .replace(/`/g, '')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .trim()
+    if (/^#{1,6}\s/.test(clean)) {
+      out.push({ kind: 'h', text: clean.replace(/^#{1,6}\s*/, '') })
+    } else if (/^[-*+]\s/.test(clean)) {
+      out.push({ kind: 'li', text: clean.replace(/^[-*+]\s+/, '') })
+    } else if (line.startsWith('    ') || line.startsWith('\t')) {
+      out.push({ kind: 'p', text: clean })
+    } else {
+      out.push({ kind: 'p', text: clean })
+    }
+  }
+  return out
+}
+
 const IconGear = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
     <circle cx="12" cy="12" r="3" />
@@ -178,6 +211,7 @@ function App() {
   const [exporting, setExporting] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
+  const [notesOpen, setNotesOpen] = useState(false)
 
   const load = useCallback(async () => {
     const i = await window.electronAPI.getSettingsInfo()
@@ -627,10 +661,7 @@ function App() {
                       <button className="btn btn-primary" onClick={doInstallUpdate} disabled={installing}>
                         {installing ? '更新中…' : '立即更新'}
                       </button>
-                      <button
-                        className="btn"
-                        onClick={() => window.electronAPI.openExternal(checkResult.url || info?.repoUrl || '')}
-                      >
+                      <button className="btn" onClick={() => setNotesOpen(true)}>
                         查看更新说明
                       </button>
                       {!checkResult.seen && (
@@ -710,6 +741,58 @@ function App() {
           )}
         </main>
       </div>
+
+      {notesOpen && checkResult && (
+        <div className="notes-overlay" onClick={() => setNotesOpen(false)}>
+          <div className="notes-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="notes-head">
+              <div className="notes-head-text">
+                <div className="notes-title">v{checkResult.latest} 更新说明</div>
+                <div className="notes-sub">
+                  当前 v{checkResult.current}
+                  {checkResult.publishedAt ? ` · ${formatReleaseDate(checkResult.publishedAt)}` : ''}
+                </div>
+              </div>
+              <button className="notes-close" title="关闭" onClick={() => setNotesOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className="notes-body">
+              {notesBlocks(checkResult.notes).length === 0 ? (
+                <p className="notes-empty">这次发布没有写更新说明，可以直接更新。</p>
+              ) : (
+                notesBlocks(checkResult.notes).map((b, i) =>
+                  b.kind === 'h' ? (
+                    <div className="notes-h" key={i}>{b.text}</div>
+                  ) : b.kind === 'li' ? (
+                    <div className="notes-li" key={i}>
+                      <span className="notes-dot" />
+                      <span>{b.text}</span>
+                    </div>
+                  ) : (
+                    <p className="notes-p" key={i}>{b.text}</p>
+                  )
+                )
+              )}
+            </div>
+
+            <div className="notes-foot">
+              <button className="btn btn-ghost" onClick={() => setNotesOpen(false)}>关闭</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setNotesOpen(false)
+                  doInstallUpdate()
+                }}
+                disabled={installing || !checkResult.assetUrl}
+              >
+                立即更新到 v{checkResult.latest}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
