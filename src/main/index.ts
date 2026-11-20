@@ -46,6 +46,8 @@ let settingsWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let blurHideReady = false
+// 主面板被"收起"时不是 hide()，而是挪到屏幕外；用它记录这个状态
+let panelParked = false
 
 const MAIN_W = 320
 const MAIN_H = 440
@@ -90,6 +92,10 @@ interface UpdateResult {
   current: string
   latest: string | null
   message: string
+  notes: string | null
+  url: string | null
+  publishedAt: string | null
+  seen: boolean
 }
 
 let lastUpdateCheck: UpdateResult | null = null
@@ -103,13 +109,144 @@ function getWindowPosition(): { x: number; y: number } {
   }
 }
 
+const FLOAT_POS_FILE = 'float-pos.json'
+
+function readFloatPos(): { x: number; y: number } | null {
+  try {
+    const raw = fs.readFileSync(join(app.getPath('userData'), FLOAT_POS_FILE), 'utf-8')
+    const obj = JSON.parse(raw) as { x?: unknown; y?: unknown }
+    const x = Number(obj.x)
+    const y = Number(obj.y)
+    if (Number.isFinite(x) && Number.isFinite(y) && x > 0 && y > 0) return { x, y }
+  } catch {
+    /* 没存过就算了 */
+  }
+  return null
+}
+
 function getFloatPosition(): { x: number; y: number } {
   const display = screen.getPrimaryDisplay()
   const { width, height } = display.workArea
+  // 用户拖动过悬浮球就把位置记下来，下次开机/重开还在原处
+  const saved = readFloatPos()
+  if (saved) {
+    const maxX = width - FLOAT_SIZE
+    const maxY = height - FLOAT_SIZE
+    return {
+      x: Math.min(Math.max(saved.x, 0), maxX),
+      y: Math.min(Math.max(saved.y, 0), maxY),
+    }
+  }
   return {
     x: width - FLOAT_SIZE - FLOAT_MARGIN,
     y: height - FLOAT_SIZE - FLOAT_MARGIN,
   }
+}
+
+/** 拖动悬浮球（按增量移动，拖动时窗口跟手） */
+function dragFloatBy(dx: number, dy: number): void {
+  if (!floatWindow || floatWindow.isDestroyed()) return
+  const b = floatWindow.getBounds()
+  const display = screen.getDisplayNearestPoint({ x: b.x, y: b.y })
+  const wa = display.workArea
+  // 只移动位置，不动尺寸：高 DPI 下 setBounds 改尺寸会把窗口越拖越大
+  const nx = Math.min(Math.max(b.x + dx, wa.x), wa.x + wa.width - FLOAT_SIZE)
+  const ny = Math.min(Math.max(b.y + dy, wa.y), wa.y + wa.height - FLOAT_SIZE)
+  // 尺寸一律显式钉成 FLOAT_SIZE：高 DPI 下 getBounds 的取值范围和 setBounds 的单位不一致，
+  // 若把读到的尺寸回填进去，窗口会越拖越大
+  floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+}
+
+/** 松手后记住悬浮球位置（写独立小文件，不依赖数据库） */
+function saveFloatPosition(): void {
+  if (!floatWindow || floatWindow.isDestroyed()) return
+  const b = floatWindow.getBounds()
+  try {
+    fs.writeFileSync(
+      join(app.getPath('userData'), FLOAT_POS_FILE),
+      JSON.stringify({ x: Math.round(b.x), y: Math.round(b.y) }),
+      'utf-8',
+    )
+  } catch {
+    /* 忽略 */
+  }
+}
+
+// 拖动期间由主进程直接读鼠标屏幕坐标来移动窗口：
+// screen.getCursorScreenPoint() 与 setBounds 用的是同一套 DIP 坐标，
+// 比在渲染层用 screenX 增量算更准（不会出现"球比鼠标快半拍"）
+let floatDragOrigin: { cx: number; cy: number; wx: number; wy: number } | null = null
+let floatDragTimer: NodeJS.Timeout | null = null
+
+function dragDbg(line: string): void {
+  try {
+    fs.appendFileSync(join('E:/浮贴', '_preview', 'drag.log'), `[${new Date().toISOString()}] ${line}\n`)
+  } catch {
+    /* 忽略 */
+  }
+}
+
+function startFloatDrag(): void {
+  if (!floatWindow || floatWindow.isDestroyed() || floatDragTimer) return
+  const b = floatWindow.getBounds()
+  const p = screen.getCursorScreenPoint()
+  floatDragOrigin = { cx: p.x, cy: p.y, wx: b.x, wy: b.y }
+  let ticks = 0
+  floatDragTimer = setInterval(() => {
+    if (!floatWindow || floatWindow.isDestroyed() || !floatDragOrigin) return
+    // 安全阀：万一系统吞掉了 mouseup，最多跟 30 秒就自己停下
+    if (++ticks > 1900) {
+      endFloatDrag()
+      return
+    }
+    const cur = screen.getCursorScreenPoint()
+    const wa = screen.getDisplayNearestPoint(cur).workArea
+    const nx = Math.min(Math.max(floatDragOrigin.wx + (cur.x - floatDragOrigin.cx), wa.x), wa.x + wa.width - FLOAT_SIZE)
+    const ny = Math.min(Math.max(floatDragOrigin.wy + (cur.y - floatDragOrigin.cy), wa.y), wa.y + wa.height - FLOAT_SIZE)
+    floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+  }, 16)
+}
+
+/** 松手：位移够大就精确落位并记住位置；几乎没动就当作单击，球放回原处并展开 */
+function endFloatDrag(): void {
+  if (floatDragTimer) {
+    clearInterval(floatDragTimer)
+    floatDragTimer = null
+  }
+  const origin = floatDragOrigin
+  floatDragOrigin = null
+  if (!floatWindow || floatWindow.isDestroyed()) return
+  const cur = screen.getCursorScreenPoint()
+  if (!origin) {
+    saveFloatPosition()
+    return
+  }
+  const dist = Math.hypot(cur.x - origin.cx, cur.y - origin.cy)
+  if (dist < 6) {
+    // 单击：复位到按下时的位置再展开
+    floatWindow.setBounds({ x: origin.wx, y: origin.wy, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+    expandFromFloat()
+    return
+  }
+  const wa = screen.getDisplayNearestPoint(cur).workArea
+  const nx = Math.min(Math.max(origin.wx + (cur.x - origin.cx), wa.x), wa.x + wa.width - FLOAT_SIZE)
+  const ny = Math.min(Math.max(origin.wy + (cur.y - origin.cy), wa.y), wa.y + wa.height - FLOAT_SIZE)
+  floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+  saveFloatPosition()
+}
+
+/** 按下但没挪动 → 当作点击：把球放回原处并展开面板 */
+function cancelFloatDrag(): void {
+  if (floatDragTimer) {
+    clearInterval(floatDragTimer)
+    floatDragTimer = null
+  }
+  if (floatWindow && !floatWindow.isDestroyed() && floatDragOrigin) {
+    const { wx, wy } = floatDragOrigin
+    floatWindow.setBounds({ x: wx, y: wy, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+  }
+  floatDragOrigin = null
+  expandFromFloat()
 }
 
 function createWindow(): void {
@@ -265,21 +402,29 @@ function createSettingsWindow(): void {
 /** 收起主面板，只留下右下角悬浮小球 */
 function hideMainPanel(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  // 透明无边框窗口直接 hide() 后，Windows 合成层有时会在屏幕上留下残影：
-  // 面板看着还在，但鼠标点上去其实落在桌面（表现为“点什么都没反应”）。
-  // 先把透明度压到 0 再隐藏，强制 DWM 重新合成，然后恢复透明度供下次显示使用。
+  // 不能用 hide()：透明无边框窗口 hide() 后 Windows 会在屏幕上留残影，
+  // 看着还在、其实点不到。也不能把窗口挪到超远负坐标：Chromium 的屏幕坐标缓存
+  // 不会跟着更新，鼠标事件会错位（表现同样也是"按钮点不到"）。
+  // 这里用透明度归零的方式收起：画面是真的没了，窗口位置不变，坐标始终正确。
+  panelParked = true
   try {
+    mainWindow.setIgnoreMouseEvents(true)
     mainWindow.setOpacity(0)
-    mainWindow.hide()
-    mainWindow.setOpacity(1)
   } catch {
     if (!mainWindow.isDestroyed()) mainWindow.hide()
   }
 }
 
+/** 面板此刻是否真的在屏幕上（而不是被挪到屏幕外） */
+function isPanelShown(): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (panelParked) return false
+  return mainWindow.isVisible()
+}
+
 function collapseToFloat(): void {
   if (isQuitting) return
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+  if (isPanelShown()) {
     hideMainPanel()
   }
   showFloat()
@@ -304,10 +449,12 @@ function expandFromFloat(): void {
   hideFloat()
   if (!mainWindow || mainWindow.isDestroyed()) return
   const { x, y } = getWindowPosition()
+  panelParked = false
+  // 位置、透明度、鼠标穿透都在 show 之前就设好，避免"刚打开那一下"状态没齐
   mainWindow.setPosition(x, y)
-  mainWindow.setOpacity(1)
   mainWindow.setIgnoreMouseEvents(false)
   mainWindow.show()
+  mainWindow.setOpacity(1)
   // Windows 会限制后台程序抢前台，导致面板刚弹出时第一下点击只用来"激活窗口"
   // （表现就是"刚打开那一瞬间点不动"）。steal 强制把应用拉前台，show 后立即聚焦。
   app.focus({ steal: true })
@@ -319,7 +466,7 @@ function expandFromFloat(): void {
 
 function toggleWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  if (mainWindow.isVisible()) {
+  if (isPanelShown()) {
     collapseToFloat()
   } else {
     expandFromFloat()
@@ -417,7 +564,14 @@ function isNewerVersion(a: string, b: string): boolean {
   return false
 }
 
-async function fetchLatestVersion(): Promise<{ ok: boolean; latest?: string; message?: string }> {
+async function fetchLatestVersion(): Promise<{
+  ok: boolean
+  latest?: string
+  message?: string
+  notes?: string | null
+  url?: string | null
+  publishedAt?: string | null
+}> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), UPDATE_CHECK_TIMEOUT)
   const headers = { 'User-Agent': 'xiaoming-clipboard', Accept: 'application/vnd.github+json' }
@@ -428,8 +582,21 @@ async function fetchLatestVersion(): Promise<{ ok: boolean; latest?: string; mes
         signal: ac.signal,
       })
       if (rel.ok) {
-        const data = (await rel.json()) as { tag_name?: string }
-        if (data.tag_name) return { ok: true, latest: String(data.tag_name).replace(/^v/i, '') }
+        const data = (await rel.json()) as {
+          tag_name?: string
+          body?: string
+          html_url?: string
+          published_at?: string
+        }
+        if (data.tag_name) {
+          return {
+            ok: true,
+            latest: String(data.tag_name).replace(/^v/i, ''),
+            notes: data.body || null,
+            url: data.html_url || null,
+            publishedAt: data.published_at || null,
+          }
+        }
       }
     } catch { /* 继续尝试 tags */ }
 
@@ -437,7 +604,13 @@ async function fetchLatestVersion(): Promise<{ ok: boolean; latest?: string; mes
     if (tags.ok) {
       const data = (await tags.json()) as Array<{ name?: string }>
       if (Array.isArray(data) && data.length > 0 && data[0]?.name) {
-        return { ok: true, latest: String(data[0].name).replace(/^v/i, '') }
+        return {
+          ok: true,
+          latest: String(data[0].name).replace(/^v/i, ''),
+          notes: null,
+          url: `https://github.com/${REPO}/tags`,
+          publishedAt: null,
+        }
       }
       return { ok: true, latest: null, message: '仓库暂无发布版本' }
     }
@@ -464,16 +637,22 @@ async function runUpdateCheck(): Promise<Omit<UpdateResult, 'time'>> {
     message = remote.latest ? `检查完成，已是最新版本（v${current}）` : '检查完成，暂无已发布的更新'
   }
 
+  const seenVersion = getSetting('update_seen_version')
   const result: Omit<UpdateResult, 'time'> = {
     ok: remote.ok,
     hasUpdate,
     current,
     latest: remote.latest || null,
     message,
+    notes: remote.notes ?? null,
+    url: remote.url ?? null,
+    publishedAt: remote.publishedAt ?? null,
+    seen: !!remote.latest && seenVersion === remote.latest,
   }
   lastUpdateCheck = { time: Date.now(), ...result }
 
-  if (hasUpdate && mainWindow && !mainWindow.isDestroyed()) {
+  // 只在有新版本、且这个版本还没被"知道了"时通知界面，避免每次启动都弹
+  if (hasUpdate && !result.seen && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('update:available', lastUpdateCheck)
   }
   return result
@@ -521,7 +700,7 @@ function buildDiagnosticsText(): string {
     `开机自启      : ${app.getLoginItemSettings().openAtLogin ? '开' : '关'}`,
     `自动检查更新  : ${getSetting('auto_check_update') !== '0' ? '开' : '关'}`,
     `呼出快捷键    : Ctrl+Shift+V`,
-    `主面板可见    : ${mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? '是' : '否'}`,
+    `主面板可见    : ${isPanelShown() ? '是' : '否'}`,
     `悬浮球可见    : ${floatWindow && !floatWindow.isDestroyed() && floatWindow.isVisible() ? '是' : '否'}`,
     `设置窗打开    : ${settingsWindow && !settingsWindow.isDestroyed() ? '是' : '否'}`,
     '',
@@ -632,6 +811,21 @@ function registerWindowHandlers(): void {
     if (!floatWindow || floatWindow.isDestroyed()) return
     floatWindow.setIgnoreMouseEvents(!!ignore, { forward: true })
   })
+  ipcMain.on('float:drag', (_e, dx: number, dy: number) => {
+    dragFloatBy(dx, dy)
+  })
+  ipcMain.on('float:drag-start', () => {
+    startFloatDrag()
+  })
+  ipcMain.on('float:drag-end', () => {
+    endFloatDrag()
+  })
+  ipcMain.on('float:drag-cancel', () => {
+    cancelFloatDrag()
+  })
+  ipcMain.on('float:save-pos', () => {
+    saveFloatPosition()
+  })
   ipcMain.on('window:expand', () => expandFromFloat())
   ipcMain.on('window:settings', () => createSettingsWindow())
   ipcMain.on('window:menu', () => {
@@ -714,6 +908,12 @@ function registerWindowHandlers(): void {
 
   ipcMain.handle('settings:update-status', () => lastUpdateCheck)
 
+  ipcMain.handle('update:dismiss', (_e, version: string) => {
+    if (version) setSetting('update_seen_version', String(version))
+    if (lastUpdateCheck && lastUpdateCheck.latest === version) lastUpdateCheck.seen = true
+    return true
+  })
+
   ipcMain.handle('settings:set-auto-update', (_e, enabled: boolean) => {
     // 与渲染进程的 settings:set 写同一张 settings 表
     setSetting('auto_check_update', enabled ? '1' : '0')
@@ -761,7 +961,7 @@ app.whenReady().then(async () => {
   // 系统睡眠/锁屏唤醒后：窗口容易失去置顶并被"冻住"，这里把它重新拉回可交互状态
   const recoverAfterWake = () => {
     if (isQuitting) return
-    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+    if (isPanelShown()) {
       mainWindow.setAlwaysOnTop(true, 'floating')
       mainWindow.setIgnoreMouseEvents(false)
       mainWindow.webContents.reload()
