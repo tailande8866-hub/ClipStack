@@ -14,8 +14,11 @@ import {
   clipboard,
   powerMonitor,
 } from 'electron'
-import { isAbsolute, join, resolve } from 'path'
+import { isAbsolute, join, resolve, dirname, basename } from 'path'
 import fs from 'fs'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import { spawn } from 'child_process'
 import {
   initDatabase,
   closeDatabase,
@@ -96,6 +99,9 @@ interface UpdateResult {
   url: string | null
   publishedAt: string | null
   seen: boolean
+  assetUrl: string | null
+  assetName: string | null
+  assetSize: number | null
 }
 
 let lastUpdateCheck: UpdateResult | null = null
@@ -571,6 +577,9 @@ async function fetchLatestVersion(): Promise<{
   notes?: string | null
   url?: string | null
   publishedAt?: string | null
+  assetUrl?: string | null
+  assetName?: string | null
+  assetSize?: number | null
 }> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), UPDATE_CHECK_TIMEOUT)
@@ -587,14 +596,19 @@ async function fetchLatestVersion(): Promise<{
           body?: string
           html_url?: string
           published_at?: string
+          assets?: Array<{ name?: string; size?: number; browser_download_url?: string }>
         }
         if (data.tag_name) {
+          const zip = (data.assets || []).find((a) => (a.name || '').toLowerCase().endsWith('.zip'))
           return {
             ok: true,
             latest: String(data.tag_name).replace(/^v/i, ''),
             notes: data.body || null,
             url: data.html_url || null,
             publishedAt: data.published_at || null,
+            assetUrl: zip?.browser_download_url || null,
+            assetName: zip?.name || null,
+            assetSize: zip?.size ?? null,
           }
         }
       }
@@ -610,6 +624,9 @@ async function fetchLatestVersion(): Promise<{
           notes: null,
           url: `https://github.com/${REPO}/tags`,
           publishedAt: null,
+          assetUrl: null,
+          assetName: null,
+          assetSize: null,
         }
       }
       return { ok: true, latest: null, message: '仓库暂无发布版本' }
@@ -648,6 +665,9 @@ async function runUpdateCheck(): Promise<Omit<UpdateResult, 'time'>> {
     url: remote.url ?? null,
     publishedAt: remote.publishedAt ?? null,
     seen: !!remote.latest && seenVersion === remote.latest,
+    assetUrl: remote.assetUrl ?? null,
+    assetName: remote.assetName ?? null,
+    assetSize: remote.assetSize ?? null,
   }
   lastUpdateCheck = { time: Date.now(), ...result }
 
@@ -656,6 +676,96 @@ async function runUpdateCheck(): Promise<Omit<UpdateResult, 'time'>> {
     mainWindow.webContents.send('update:available', lastUpdateCheck)
   }
   return result
+}
+
+type UpdateProgress = {
+  phase: 'download' | 'extract' | 'apply'
+  received?: number
+  total?: number
+  percent?: number
+  message?: string
+}
+
+function sendUpdateProgress(payload: UpdateProgress): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:progress', payload)
+}
+
+function psQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+/**
+ * 便携版一键更新：下载 → 解压 → 等本进程退出后覆盖安装目录 → 自动重启
+ * 之所以要外部脚本，是因为 Windows 无法覆盖正在运行的 exe
+ */
+async function installUpdate(): Promise<{ ok: boolean; message: string }> {
+  const info = lastUpdateCheck
+  if (!info || !info.hasUpdate) return { ok: false, message: '当前没有可安装的新版本' }
+  if (!info.assetUrl) return { ok: false, message: '这个版本没附带 zip 包，只能去 Release 页手动下载' }
+
+  const zipPath = join(app.getPath('temp'), `ClipStack-${info.latest}-x64.zip`)
+  const workDir = join(app.getPath('temp'), `clipstack-update-${info.latest}`)
+  const payloadDir = join(workDir, 'payload')
+
+  try {
+    await fs.promises.rm(workDir, { recursive: true, force: true })
+    await fs.promises.mkdir(workDir, { recursive: true })
+
+    sendUpdateProgress({ phase: 'download', received: 0, total: info.assetSize || 0, percent: 0 })
+    const res = await net.fetch(info.assetUrl, { headers: { 'User-Agent': 'xiaoming-clipboard' } })
+    if (!res.ok || !res.body) throw new Error(`下载失败（HTTP ${res.status}）`)
+    const total = Number(res.headers.get('content-length') || info.assetSize || 0)
+    let received = 0
+    const rs = Readable.fromWeb(res.body as any)
+    rs.on('data', (chunk: Buffer) => {
+      received += chunk.length
+      const percent = total ? Math.min(98, Math.round((received / total) * 100)) : 0
+      sendUpdateProgress({ phase: 'download', received, total, percent })
+    })
+    await pipeline(rs, fs.createWriteStream(zipPath))
+    if (received === 0) throw new Error('下载到的文件是空的，网络可能被拦截')
+
+    sendUpdateProgress({ phase: 'extract', percent: 99 })
+    await fs.promises.mkdir(payloadDir, { recursive: true })
+    await new Promise<void>((resolveP, rejectP) => {
+      const proc = spawn('tar.exe', ['-xf', zipPath, '-C', payloadDir], { windowsHide: true })
+      proc.on('error', rejectP)
+      proc.on('close', (code) => (code === 0 ? resolveP() : rejectP(new Error(`解压失败（退出码 ${code}）`))))
+    })
+
+    const exeName = basename(app.getPath('exe'))
+    if (!fs.existsSync(join(payloadDir, exeName))) throw new Error(`解压后没找到 ${exeName}`)
+
+    const appDir = dirname(app.getPath('exe'))
+    const ps1Path = join(workDir, 'apply-update.ps1')
+    const script = [
+      `$appDir = ${psQuote(appDir)}`,
+      `$src = ${psQuote(payloadDir)}`,
+      `$exe = ${psQuote(exeName)}`,
+      `$oldPid = ${process.pid}`,
+      `while (Get-Process -Id $oldPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 400 }`,
+      `Start-Sleep -Seconds 1`,
+      `$rc = Join-Path $env:SystemRoot 'System32\\robocopy.exe'`,
+      `& $rc $src $appDir /MIR /NFL /NDL /NJH /NJS | Out-Null`,
+      `Start-Process -FilePath (Join-Path $appDir $exe) -WorkingDirectory $appDir`,
+      `Start-Sleep -Seconds 2`,
+      `Remove-Item -LiteralPath $src -Recurse -Force -ErrorAction SilentlyContinue`,
+      `Remove-Item -LiteralPath ${psQuote(zipPath)} -Force -ErrorAction SilentlyContinue`,
+      `Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue`,
+    ].join('\r\n')
+    await fs.promises.writeFile(ps1Path, '\ufeff' + script, 'utf-8')
+
+    sendUpdateProgress({ phase: 'apply', percent: 100 })
+    spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ps1Path], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    }).unref()
+    setTimeout(() => app.quit(), 700)
+    return { ok: true, message: '已下载完成，正在后台替换文件，几秒后会自动重启' }
+  } catch (err) {
+    return { ok: false, message: (err as Error).message || '更新失败' }
+  }
 }
 
 function buildDiagnosticsText(): string {
@@ -913,6 +1023,9 @@ function registerWindowHandlers(): void {
     if (lastUpdateCheck && lastUpdateCheck.latest === version) lastUpdateCheck.seen = true
     return true
   })
+
+  // 一键静默更新：下载 zip → 解压 → 退出后覆盖安装目录 → 自动重启
+  ipcMain.handle('update:install', async () => installUpdate())
 
   ipcMain.handle('settings:set-auto-update', (_e, enabled: boolean) => {
     // 与渲染进程的 settings:set 写同一张 settings 表

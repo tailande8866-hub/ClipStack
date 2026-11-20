@@ -12,3 +12,6 @@ _preview/
 tools/_*.mjs
 tools/_*.py
 剪贴历史/
+_test*
+
+tools/_*

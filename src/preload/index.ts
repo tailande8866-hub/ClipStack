@@ -96,4 +96,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   dismissUpdate: (version: string) => ipcRenderer.invoke('update:dismiss', version),
+
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
+  onUpdateProgress: (callback: (progress: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
+    ipcRenderer.on('update:progress', listener)
+    return () => ipcRenderer.removeListener('update:progress', listener)
+  },
 })

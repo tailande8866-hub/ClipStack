@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import './settings.css'
 import appIcon from './assets/app-icon.png'
 import heroArt from './assets/hero-aurora.jpg'
-import type { SettingsInfo } from './types/clipboard'
+import type { SettingsInfo, UpdateProgress } from './types/clipboard'
 
 type TabKey = 'general' | 'storage' | 'feedback' | 'about'
 
@@ -24,6 +24,24 @@ function retentionLabel(v: string): string {
   if (hours < 24) return `${hours} 小时`
   const days = hours / 24
   return Number.isInteger(days) ? `${days} 天` : `${hours} 小时`
+}
+
+/** 把 Release 正文压成几行纯文本要点，去掉 markdown 符号和空行 */
+function notesFor(notes: string | null | undefined, max = 4): string[] {
+  if (!notes) return []
+  const lines = notes
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^#{1,6}\s*/g, '')
+        .replace(/^\s*[-*+]\s*/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/`/g, '')
+        .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+        .trim()
+    )
+    .filter((line) => line && !/^---+$/.test(line))
+  return lines.slice(0, max)
 }
 
 const IconGear = () => (
@@ -158,6 +176,8 @@ function App() {
   const [checkResult, setCheckResult] = useState<SettingsInfo['updateCheck']>(null)
   const [autoUpdate, setAutoUpdate] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [progress, setProgress] = useState<UpdateProgress | null>(null)
 
   const load = useCallback(async () => {
     const i = await window.electronAPI.getSettingsInfo()
@@ -177,7 +197,13 @@ function App() {
     const off = window.electronAPI.onUpdateAvailable((u) => {
       setCheckResult(u)
     })
-    return off
+    const offProgress = window.electronAPI.onUpdateProgress((p) => {
+      setProgress(p)
+    })
+    return () => {
+      off()
+      offProgress()
+    }
   }, [load])
 
   function switchTab(k: TabKey) {
@@ -282,10 +308,30 @@ function App() {
     if (!r.ok) {
       setNotice({ type: 'warn', text: r.message })
     } else if (r.hasUpdate) {
-      setNotice({ type: 'ok', text: r.message + '，可到 GitHub 仓库下载新版本。' })
+      setNotice({ type: 'ok', text: `发现新版本 v${r.latest}，可以直接点「立即更新」，程序会自动下载并重启。` })
     } else {
       setNotice({ type: 'ok', text: r.message })
     }
+  }
+
+  async function doInstallUpdate() {
+    if (installing) return
+    setInstalling(true)
+    setProgress(null)
+    setNotice(null)
+    const r = await window.electronAPI.installUpdate()
+    setInstalling(false)
+    if (r.ok) {
+      setNotice({ type: 'ok', text: r.message })
+    } else {
+      setNotice({ type: 'err', text: '更新失败：' + r.message })
+    }
+  }
+
+  async function dismissUpdate() {
+    if (!checkResult?.latest) return
+    await window.electronAPI.dismissUpdate(checkResult.latest)
+    setCheckResult({ ...checkResult, seen: true })
   }
 
   async function toggleAutoUpdate() {
@@ -298,6 +344,19 @@ function App() {
     const t = new Date(checkResult.time)
     const pad = (n: number) => String(n).padStart(2, '0')
     return `上次检查 ${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())} · ${checkResult.message}`
+  })()
+
+  const notes = notesFor(checkResult?.notes, 4)
+
+  const progressText = (() => {
+    if (!progress) return '准备中…'
+    if (progress.phase === 'download') {
+      const mb = (n: number) => (n / 1024 / 1024).toFixed(1)
+      const total = progress.total ? ` / ${mb(progress.total)} MB` : ''
+      return `正在下载 ${progress.percent ?? 0}%（${mb(progress.received ?? 0)}${total}）`
+    }
+    if (progress.phase === 'extract') return '正在解压并校验文件…'
+    return '文件已就绪，正在替换并重启…'
   })()
 
   return (
@@ -532,11 +591,66 @@ function App() {
                   title="检查更新"
                   subtitle={lastCheckText}
                   right={
-                    <button className="btn" onClick={doCheckUpdate} disabled={checking}>
+                    <button className="btn" onClick={doCheckUpdate} disabled={checking || installing}>
                       {checking ? '检查中…' : '检查更新…'}
                     </button>
                   }
                 />
+
+                {checkResult && checkResult.ok && checkResult.hasUpdate && (
+                  <div className="update-panel">
+                    <div className="update-ver">
+                      <span className="uv-cur">当前 v{checkResult.current}</span>
+                      <span className="uv-arrow">→</span>
+                      <span className="uv-new">新版本 v{checkResult.latest}</span>
+                      {checkResult.seen && <span className="uv-seen">已提示过</span>}
+                    </div>
+
+                    {notes.length > 0 && (
+                      <ul className="update-notes">
+                        {notes.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {installing && (
+                      <div className="update-progress">
+                        <div className="update-progress-bar">
+                          <span style={{ width: `${progress?.percent ?? 0}%` }} />
+                        </div>
+                        <div className="update-progress-text">{progressText}</div>
+                      </div>
+                    )}
+
+                    <div className="update-actions">
+                      <button className="btn btn-primary" onClick={doInstallUpdate} disabled={installing}>
+                        {installing ? '更新中…' : '立即更新'}
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => window.electronAPI.openExternal(checkResult.url || info?.repoUrl || '')}
+                      >
+                        查看更新说明
+                      </button>
+                      {!checkResult.seen && (
+                        <button className="btn btn-ghost" onClick={dismissUpdate}>
+                          暂不更新
+                        </button>
+                      )}
+                    </div>
+                    <div className="update-tip">
+                      点「立即更新」会自动下载并替换程序文件，完成后自动重启，记录和设置都会保留。
+                    </div>
+                  </div>
+                )}
+
+                {checkResult && checkResult.ok && !checkResult.hasUpdate && (
+                  <div className="update-panel update-panel-quiet">
+                    <span className="uv-dot" />已是最新版本 v{checkResult.current}
+                  </div>
+                )}
+
                 <ItemRow
                   icon={<IconDown />}
                   title="自动检查更新"

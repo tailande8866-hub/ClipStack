@@ -33,6 +33,8 @@ export default function App() {
     publishedAt?: string | null
   }
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [progress, setProgress] = useState<{ phase: string; percent?: number; received?: number; total?: number } | null>(null)
 
   useEffect(() => {
     const api = window.electronAPI as unknown as {
@@ -40,6 +42,8 @@ export default function App() {
       onUpdateAvailable?: (cb: (info: UpdateInfo) => void) => () => void
       dismissUpdate?: (v: string) => Promise<boolean>
       openExternal?: (url: string) => Promise<unknown>
+      installUpdate?: () => Promise<{ ok: boolean; message: string }>
+      onUpdateProgress?: (cb: (p: { phase: string; percent?: number }) => void) => () => void
     }
     api.getUpdateStatus?.().then((u) => {
       if (u && u.hasUpdate && !u.seen) setUpdateInfo(u)
@@ -47,8 +51,43 @@ export default function App() {
     const off = api.onUpdateAvailable?.((u) => {
       if (u && u.hasUpdate) setUpdateInfo(u)
     })
-    return () => { off?.() }
+    const offProgress = api.onUpdateProgress?.((p) => setProgress(p))
+    return () => { off?.(); offProgress?.() }
   }, [])
+
+  const progressPercent = progress?.percent ?? 0
+  const progressText = (() => {
+    if (!progress) return '准备中…'
+    if (progress.phase === 'download') {
+      const mb = (n: number) => (n / 1024 / 1024).toFixed(1)
+      return progress.total
+        ? `正在下载 ${progressPercent}%（${mb(progress.received || 0)} / ${mb(progress.total)} MB）`
+        : `正在下载 ${mb(progress.received || 0)} MB`
+    }
+    if (progress.phase === 'extract') return '正在解压…'
+    return '正在替换文件，马上重启…'
+  })()
+
+  async function handleInstall() {
+    const api = window.electronAPI as unknown as {
+      installUpdate?: () => Promise<{ ok: boolean; message: string }>
+    }
+    setInstalling(true)
+    setProgress(null)
+    const r = await api.installUpdate?.()
+    if (!r) {
+      setInstalling(false)
+      return
+    }
+    if (!r.ok) {
+      setInstalling(false)
+      setProgress(null)
+      setToastMsg('更新失败：' + r.message)
+      window.clearTimeout(toastTimer.current)
+      toastTimer.current = window.setTimeout(() => setToastMsg(''), 4000)
+    }
+    // ok 时主进程会在几百毫秒后自行退出并重启，这里不做额外处理
+  }
 
   function dismissUpdate() {
     const v = updateInfo?.latest
@@ -185,12 +224,19 @@ export default function App() {
               ))}
           </div>
           <div className="update-actions">
-            <button
-              className="update-btn"
-              onClick={() => updateInfo.url && window.electronAPI.openExternal(updateInfo.url)}
-            >
-              去下载新版
-            </button>
+            {!installing && (
+              <button className="update-btn" onClick={handleInstall}>
+                {'一键更新'}
+              </button>
+            )}
+            {installing && (
+              <div className="update-progress">
+                <div className="update-progress-bar">
+                  <span style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="update-progress-text">{progressText}</div>
+              </div>
+            )}
             <button className="update-btn ghost" onClick={dismissUpdate}>
               知道了
             </button>

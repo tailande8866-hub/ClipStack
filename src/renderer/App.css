@@ -1037,3 +1037,32 @@ html, body, #root {
 }
 
 .event-probe { position: fixed; left: -9999px; top: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* 更新卡里的下载/替换进度 */
+.update-card .update-progress {
+  flex: 1;
+  min-width: 0;
+}
+.update-card .update-progress-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.update-card .update-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #B7DCFF, #8E9BFF);
+  box-shadow: 0 0 8px rgba(140, 190, 255, 0.8);
+  transition: width 200ms linear;
+}
+.update-card .update-progress-text {
+  margin-top: 4px;
+  font-size: 9.5px;
+  color: rgba(210, 226, 246, 0.78);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -40,6 +40,17 @@ export interface ElectronAPI {
   getUpdateStatus: () => Promise<UpdateCheckResult | null>
   setAutoCheckUpdate: (enabled: boolean) => Promise<boolean>
   onUpdateAvailable: (callback: (info: UpdateCheckResult) => void) => () => void
+  dismissUpdate: (version: string) => Promise<boolean>
+  installUpdate: () => Promise<{ ok: boolean; message: string }>
+  onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void
+}
+
+export interface UpdateProgress {
+  phase: 'download' | 'extract' | 'apply'
+  received?: number
+  total?: number
+  percent?: number
+  message?: string
 }
 
 export interface HistoryStats {
@@ -58,6 +69,13 @@ export interface UpdateCheckResult {
   current: string
   latest: string | null
   message: string
+  notes?: string | null
+  url?: string | null
+  publishedAt?: string | null
+  seen?: boolean
+  assetUrl?: string | null
+  assetName?: string | null
+  assetSize?: number | null
 }
 
 export interface SettingsInfo {

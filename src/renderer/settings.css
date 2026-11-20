@@ -708,3 +708,103 @@ select option { background: #131A24; color: var(--text); }
   0%, 100% { opacity: 0.4; transform: scale(1); }
   50%      { opacity: 0.64; transform: scale(1.05); }
 }
+/* ===== 软件更新面板 ===== */
+.update-panel {
+  margin-top: 12px;
+  padding: 14px 16px 15px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(127, 182, 255, 0.10) 0%, rgba(142, 155, 255, 0.06) 100%);
+  border: 1px solid rgba(127, 182, 255, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.update-ver {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  margin-bottom: 9px;
+}
+.uv-cur { color: var(--text-3); }
+.uv-arrow { color: var(--text-3); opacity: 0.6; }
+.uv-new { color: #B7DCFF; font-weight: 600; }
+.uv-seen {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+}
+
+.update-notes {
+  margin: 0 0 12px;
+  padding-left: 15px;
+  list-style: disc;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.75;
+}
+.update-notes li::marker { color: rgba(127, 182, 255, 0.55); }
+
+.update-progress { margin-bottom: 12px; }
+.update-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10);
+  overflow: hidden;
+}
+.update-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #B7DCFF, #7FAEFF);
+  box-shadow: 0 0 10px rgba(127, 182, 255, 0.7);
+  transition: width 220ms linear;
+}
+.update-progress-text {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.update-actions .btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-3);
+}
+.update-actions .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+}
+
+.update-tip {
+  margin-top: 10px;
+  font-size: 10.8px;
+  line-height: 1.7;
+  color: var(--text-3);
+  opacity: 0.85;
+}
+
+.update-panel-quiet {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--stroke);
+}
+.uv-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7FE0B0;
+  box-shadow: 0 0 8px rgba(127, 224, 176, 0.7);
+}
