@@ -26,24 +26,6 @@ function retentionLabel(v: string): string {
   return Number.isInteger(days) ? `${days} 天` : `${hours} 小时`
 }
 
-/** 把 Release 正文压成几行纯文本要点，去掉 markdown 符号和空行 */
-function notesFor(notes: string | null | undefined, max = 4): string[] {
-  if (!notes) return []
-  const lines = notes
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .replace(/^#{1,6}\s*/g, '')
-        .replace(/^\s*[-*+]\s*/g, '')
-        .replace(/\*\*/g, '')
-        .replace(/`/g, '')
-        .replace(/\[(.+?)\]\(.+?\)/g, '$1')
-        .trim()
-    )
-    .filter((line) => line && !/^---+$/.test(line))
-  return lines.slice(0, max)
-}
-
 function formatReleaseDate(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -212,6 +194,7 @@ function App() {
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const i = await window.electronAPI.getSettingsInfo()
@@ -230,6 +213,10 @@ function App() {
     })
     const off = window.electronAPI.onUpdateAvailable((u) => {
       setCheckResult(u)
+      if (u && u.hasUpdate) {
+        setTab('about')
+        setNotesOpen(true)
+      }
     })
     const offProgress = window.electronAPI.onUpdateProgress((p) => {
       setProgress(p)
@@ -342,30 +329,36 @@ function App() {
     if (!r.ok) {
       setNotice({ type: 'warn', text: r.message })
     } else if (r.hasUpdate) {
-      setNotice({ type: 'ok', text: `发现新版本 v${r.latest}，可以直接点「立即更新」，程序会自动下载并重启。` })
+      setNotesOpen(true)
     } else {
       setNotice({ type: 'ok', text: r.message })
+    }
+  }
+
+  async function closeNotes() {
+    setNotesOpen(false)
+    // 用户点了关闭/×，就记成"已提示过"，下次启动不再打扰
+    if (checkResult?.latest) {
+      await window.electronAPI.dismissUpdate(checkResult.latest)
+      setCheckResult({ ...checkResult, seen: true })
     }
   }
 
   async function doInstallUpdate() {
     if (installing) return
     setInstalling(true)
+    setInstallError(null)
     setProgress(null)
     setNotice(null)
     const r = await window.electronAPI.installUpdate()
     setInstalling(false)
     if (r.ok) {
+      setNotesOpen(false)
       setNotice({ type: 'ok', text: r.message })
     } else {
+      setInstallError(r.message)
       setNotice({ type: 'err', text: '更新失败：' + r.message })
     }
-  }
-
-  async function dismissUpdate() {
-    if (!checkResult?.latest) return
-    await window.electronAPI.dismissUpdate(checkResult.latest)
-    setCheckResult({ ...checkResult, seen: true })
   }
 
   async function toggleAutoUpdate() {
@@ -380,14 +373,13 @@ function App() {
     return `上次检查 ${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())} · ${checkResult.message}`
   })()
 
-  const notes = notesFor(checkResult?.notes, 4)
-
   const progressText = (() => {
     if (!progress) return '准备中…'
     if (progress.phase === 'download') {
       const mb = (n: number) => (n / 1024 / 1024).toFixed(1)
       const total = progress.total ? ` / ${mb(progress.total)} MB` : ''
-      return `正在下载 ${progress.percent ?? 0}%（${mb(progress.received ?? 0)}${total}）`
+      const suffix = progress.message ? ` · ${progress.message}` : ''
+      return `正在下载 ${progress.percent ?? 0}%（${mb(progress.received ?? 0)}${total}）${suffix}`
     }
     if (progress.phase === 'extract') return '正在解压并校验文件…'
     return '文件已就绪，正在替换并重启…'
@@ -632,47 +624,10 @@ function App() {
                 />
 
                 {checkResult && checkResult.ok && checkResult.hasUpdate && (
-                  <div className="update-panel">
-                    <div className="update-ver">
-                      <span className="uv-cur">当前 v{checkResult.current}</span>
-                      <span className="uv-arrow">→</span>
-                      <span className="uv-new">新版本 v{checkResult.latest}</span>
-                      {checkResult.seen && <span className="uv-seen">已提示过</span>}
-                    </div>
-
-                    {notes.length > 0 && (
-                      <ul className="update-notes">
-                        {notes.map((line, i) => (
-                          <li key={i}>{line}</li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {installing && (
-                      <div className="update-progress">
-                        <div className="update-progress-bar">
-                          <span style={{ width: `${progress?.percent ?? 0}%` }} />
-                        </div>
-                        <div className="update-progress-text">{progressText}</div>
-                      </div>
-                    )}
-
-                    <div className="update-actions">
-                      <button className="btn btn-primary" onClick={doInstallUpdate} disabled={installing}>
-                        {installing ? '更新中…' : '立即更新'}
-                      </button>
-                      <button className="btn" onClick={() => setNotesOpen(true)}>
-                        查看更新说明
-                      </button>
-                      {!checkResult.seen && (
-                        <button className="btn btn-ghost" onClick={dismissUpdate}>
-                          暂不更新
-                        </button>
-                      )}
-                    </div>
-                    <div className="update-tip">
-                      点「立即更新」会自动下载并替换程序文件，完成后自动重启，记录和设置都会保留。
-                    </div>
+                  <div className="update-panel update-panel-quiet">
+                    <span className="uv-dot uv-dot-new" />
+                    发现新版本 v{checkResult.latest}
+                    <button className="link-btn" onClick={() => setNotesOpen(true)}>查看更新说明</button>
                   </div>
                 )}
 
@@ -743,7 +698,7 @@ function App() {
       </div>
 
       {notesOpen && checkResult && (
-        <div className="notes-overlay" onClick={() => setNotesOpen(false)}>
+        <div className="notes-overlay" onClick={closeNotes}>
           <div className="notes-modal" onClick={(e) => e.stopPropagation()}>
             <div className="notes-head">
               <div className="notes-head-text">
@@ -753,7 +708,7 @@ function App() {
                   {checkResult.publishedAt ? ` · ${formatReleaseDate(checkResult.publishedAt)}` : ''}
                 </div>
               </div>
-              <button className="notes-close" title="关闭" onClick={() => setNotesOpen(false)}>
+              <button className="notes-close" title="关闭" onClick={closeNotes}>
                 ×
               </button>
             </div>
@@ -778,18 +733,28 @@ function App() {
             </div>
 
             <div className="notes-foot">
-              <button className="btn btn-ghost" onClick={() => setNotesOpen(false)}>关闭</button>
+              <button className="btn btn-ghost" onClick={closeNotes} disabled={installing}>
+                关闭
+              </button>
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  setNotesOpen(false)
-                  doInstallUpdate()
-                }}
+                onClick={() => { doInstallUpdate() }}
                 disabled={installing || !checkResult.assetUrl}
               >
-                立即更新到 v{checkResult.latest}
+                {installing ? '更新中…' : '更新'}
               </button>
             </div>
+            {installing && (
+              <div className="notes-progress">
+                <div className="update-progress-bar">
+                  <span style={{ width: `${progress?.percent ?? 0}%` }} />
+                </div>
+                <div className="update-progress-text">{progressText}</div>
+              </div>
+            )}
+            {!installing && installError && (
+              <div className="notes-error">{installError}</div>
+            )}
           </div>
         </div>
       )}
@@ -798,3 +763,4 @@ function App() {
 }
 
 createRoot(document.getElementById('root')!).render(<App />)
+

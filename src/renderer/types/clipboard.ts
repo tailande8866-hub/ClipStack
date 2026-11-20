@@ -76,6 +76,7 @@ export interface UpdateCheckResult {
   assetUrl?: string | null
   assetName?: string | null
   assetSize?: number | null
+  assetDigest?: string | null
 }
 
 export interface SettingsInfo {

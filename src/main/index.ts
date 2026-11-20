@@ -16,9 +16,8 @@ import {
 } from 'electron'
 import { isAbsolute, join, resolve, dirname, basename } from 'path'
 import fs from 'fs'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
-import { spawn } from 'child_process'
+import { createHash } from 'crypto'
+import { spawn, execFileSync } from 'child_process'
 import {
   initDatabase,
   closeDatabase,
@@ -87,6 +86,8 @@ function formatRetentionLabel(hoursStr: string): string {
   return Number.isInteger(days) ? `${days} 天` : `${hours} 小时`
 }
 const UPDATE_CHECK_TIMEOUT = 10000
+/** 一键更新用的计划任务名：启动时顺手清掉，避免残留 */
+const UPDATE_TASK_NAME = 'ClipStackUpdate'
 
 interface UpdateResult {
   time: number
@@ -102,6 +103,7 @@ interface UpdateResult {
   assetUrl: string | null
   assetName: string | null
   assetSize: number | null
+  assetDigest: string | null
 }
 
 let lastUpdateCheck: UpdateResult | null = null
@@ -580,6 +582,7 @@ async function fetchLatestVersion(): Promise<{
   assetUrl?: string | null
   assetName?: string | null
   assetSize?: number | null
+  assetDigest?: string | null
 }> {
   const ac = new AbortController()
   const timer = setTimeout(() => ac.abort(), UPDATE_CHECK_TIMEOUT)
@@ -596,7 +599,7 @@ async function fetchLatestVersion(): Promise<{
           body?: string
           html_url?: string
           published_at?: string
-          assets?: Array<{ name?: string; size?: number; browser_download_url?: string }>
+          assets?: Array<{ name?: string; size?: number; browser_download_url?: string; digest?: string }>
         }
         if (data.tag_name) {
           const zip = (data.assets || []).find((a) => (a.name || '').toLowerCase().endsWith('.zip'))
@@ -609,6 +612,7 @@ async function fetchLatestVersion(): Promise<{
             assetUrl: zip?.browser_download_url || null,
             assetName: zip?.name || null,
             assetSize: zip?.size ?? null,
+            assetDigest: zip?.digest || null,
           }
         }
       }
@@ -627,6 +631,7 @@ async function fetchLatestVersion(): Promise<{
           assetUrl: null,
           assetName: null,
           assetSize: null,
+          assetDigest: null,
         }
       }
       return { ok: true, latest: null, message: '仓库暂无发布版本' }
@@ -668,12 +673,29 @@ async function runUpdateCheck(): Promise<Omit<UpdateResult, 'time'>> {
     assetUrl: remote.assetUrl ?? null,
     assetName: remote.assetName ?? null,
     assetSize: remote.assetSize ?? null,
+    assetDigest: remote.assetDigest ?? null,
   }
   lastUpdateCheck = { time: Date.now(), ...result }
 
-  // 只在有新版本、且这个版本还没被"知道了"时通知界面，避免每次启动都弹
-  if (hasUpdate && !result.seen && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('update:available', lastUpdateCheck)
+  // 有新版本就先弹窗：直接打开设置窗，把更新说明弹窗弹出来（不再在主面板塞卡片）
+  if (hasUpdate && !result.seen) {
+    if (!settingsWindow || settingsWindow.isDestroyed()) {
+      createSettingsWindow()
+    } else {
+      settingsWindow.show()
+      settingsWindow.focus()
+    }
+    const push = () => {
+      if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.webContents.send('update:available', lastUpdateCheck)
+      }
+    }
+    if (settingsWindow && settingsWindow.webContents.isLoading()) {
+      settingsWindow.webContents.once('did-finish-load', () => setTimeout(push, 300))
+    } else {
+      setTimeout(push, 600)
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:available', lastUpdateCheck)
   }
   return result
 }
@@ -694,6 +716,12 @@ function psQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
+async function sha256OfFile(filePath: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk as Buffer)
+  return hash.digest('hex').toLowerCase()
+}
+
 /**
  * 便携版一键更新：下载 → 解压 → 等本进程退出后覆盖安装目录 → 自动重启
  * 之所以要外部脚本，是因为 Windows 无法覆盖正在运行的 exe
@@ -703,61 +731,95 @@ async function installUpdate(): Promise<{ ok: boolean; message: string }> {
   if (!info || !info.hasUpdate) return { ok: false, message: '当前没有可安装的新版本' }
   if (!info.assetUrl) return { ok: false, message: '这个版本没附带 zip 包，只能去 Release 页手动下载' }
 
-  const zipPath = join(app.getPath('temp'), `ClipStack-${info.latest}-x64.zip`)
-  const workDir = join(app.getPath('temp'), `clipstack-update-${info.latest}`)
-  const payloadDir = join(workDir, 'payload')
+  const stamp = Date.now()
+  const zipPath = join(app.getPath('temp'), `ClipStack-${info.latest}-x64-${stamp}.zip`)
+  const workDir = join(app.getPath('temp'), `clipstack-update-${info.latest}-${stamp}`)
+  let payloadDir = join(workDir, 'payload')
 
   try {
-    await fs.promises.rm(workDir, { recursive: true, force: true })
+    // 旧目录可能被占用（杀毒、残留句柄）删不掉，直接换一个全新目录，不让它挡住更新
+    await fs.promises.rm(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => undefined)
     await fs.promises.mkdir(workDir, { recursive: true })
 
     sendUpdateProgress({ phase: 'download', received: 0, total: info.assetSize || 0, percent: 0 })
-    // GitHub 在国内经常被重置，失败就重试几次
-    let received = 0
-    let lastErr: Error | null = null
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        received = 0
-        const res = await net.fetch(info.assetUrl, { headers: { 'User-Agent': 'xiaoming-clipboard' } })
-        if (!res.ok || !res.body) throw new Error(`下载失败（HTTP ${res.status}）`)
-        const total = Number(res.headers.get('content-length') || info.assetSize || 0)
-        const rs = Readable.fromWeb(res.body as any)
-        rs.on('data', (chunk: Buffer) => {
-          received += chunk.length
-          const percent = total ? Math.min(98, Math.round((received / total) * 100)) : 0
-          sendUpdateProgress({ phase: 'download', received, total, percent })
-        })
-        await pipeline(rs, fs.createWriteStream(zipPath))
-        if (received === 0) throw new Error('下载到的文件是空的，网络可能被拦截')
-        if (info.assetSize && received < info.assetSize * 0.99) throw new Error('下载不完整')
-        lastErr = null
-        break
-      } catch (e) {
-        lastErr = e as Error
-        await fs.promises.rm(zipPath, { force: true })
-        if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt))
-      }
-    }
-    if (lastErr) {
-      throw new Error(`下载失败（已重试 3 次）：${lastErr.message}。可以在设置里点「查看更新说明」手动下载。`)
-    }
-
-    sendUpdateProgress({ phase: 'extract', percent: 99 })
-    await fs.promises.mkdir(payloadDir, { recursive: true })
+    // GitHub 直连在国内又慢又容易断，先走加速镜像，镜像都不行再回退直连
+    const mirrors = ['https://gh-proxy.com/', 'https://ghproxy.net/']
+    const sources: Array<{ url: string; label: string }> = [
+      ...mirrors.map((m) => ({ url: m + info.assetUrl, label: '加速通道' })),
+      { url: info.assetUrl, label: 'GitHub 直连' },
+    ]
     const tarExe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
     if (!fs.existsSync(tarExe)) throw new Error('系统里找不到 tar.exe，无法解压更新包')
-    await new Promise<void>((resolveP, rejectP) => {
-      const proc = spawn(tarExe, ['-xf', zipPath, '-C', payloadDir], { windowsHide: true })
-      let errText = ''
-      proc.stderr?.on('data', (chunk: Buffer) => { errText += chunk.toString() })
-      proc.on('error', rejectP)
-      proc.on('close', (code) =>
-        code === 0 ? resolveP() : rejectP(new Error(`解压失败（退出码 ${code}）${errText ? '：' + errText.trim() : ''}`))
-      )
-    })
-
     const exeName = basename(app.getPath('exe'))
-    if (!fs.existsSync(join(payloadDir, exeName))) throw new Error(`解压后没找到 ${exeName}`)
+    const expectedSha = String(info.assetDigest || '').replace(/^sha256:/i, '').toLowerCase()
+    let lastErr: Error | null = null
+    let usedSource = ''
+    // 下载 + 校验 + 解压绑在同一个源里：某个源传坏包就换下一个源，不再直接判失败
+    for (const source of sources) {
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          let received = 0
+          usedSource = source.label
+          const res = await net.fetch(source.url, { headers: { 'User-Agent': 'xiaoming-clipboard' } })
+          if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+          const total = Number(res.headers.get('content-length') || info.assetSize || 0)
+          const ws = fs.createWriteStream(zipPath)
+          const reader = (res.body as any).getReader()
+          let writeErr: Error | null = null
+          ws.on('error', (e: Error) => { writeErr = e })
+          try {
+            for (;;) {
+              const { done, value } = await reader.read()
+              if (done) break
+              if (!value || value.length === 0) continue
+              received += value.length
+              const percent = total ? Math.min(98, Math.round((received / total) * 100)) : 0
+              sendUpdateProgress({ phase: 'download', received, total, percent, message: source.label })
+              if (!ws.write(value)) await new Promise<void>((r) => ws.once('drain', () => r()))
+              if (writeErr) throw writeErr
+            }
+          } finally {
+            await new Promise<void>((r) => ws.end(() => r()))
+            reader.releaseLock?.()
+          }
+          if (writeErr) throw writeErr
+          if (received === 0) throw new Error('下载到的文件是空的')
+          if (info.assetSize && received < info.assetSize * 0.99) throw new Error('下载不完整')
+          // GitHub 会给出资产的 sha256，下完先校验，防止镜像传了坏包
+          if (expectedSha) {
+            const actual = await sha256OfFile(zipPath)
+            if (actual !== expectedSha) throw new Error('文件校验没通过，拿到的包是坏的')
+          }
+
+          sendUpdateProgress({ phase: 'extract', percent: 99, message: usedSource })
+          // 每轮换一个全新解压目录，避免上一次残留（被占用删不掉）把这一轮也带崩
+          payloadDir = join(workDir, `payload-${attempt}-${Date.now()}`)
+          await fs.promises.mkdir(payloadDir, { recursive: true })
+          await new Promise<void>((resolveP, rejectP) => {
+            const proc = spawn(tarExe, ['-xf', zipPath, '-C', payloadDir], { windowsHide: true })
+            let errText = ''
+            proc.stderr?.on('data', (chunk: Buffer) => { errText += chunk.toString() })
+            proc.on('error', rejectP)
+            proc.on('close', (code) =>
+              code === 0 ? resolveP() : rejectP(new Error(`解压失败（退出码 ${code}）${errText ? '：' + errText.trim() : ''}`))
+            )
+          })
+          if (!fs.existsSync(join(payloadDir, exeName))) throw new Error(`解压后没找到 ${exeName}`)
+          lastErr = null
+          break
+        } catch (e) {
+          lastErr = e as Error
+          await fs.promises.rm(zipPath, { force: true }).catch(() => undefined)
+          await new Promise((r) => setTimeout(r, 1200 * attempt))
+        }
+      }
+      if (!lastErr) break
+    }
+    if (lastErr) {
+      throw new Error(
+        `更新包准备失败（直连和加速通道都试过了）：${lastErr.message}。可以在设置里点「查看更新说明」手动下载。`
+      )
+    }
 
     const appDir = dirname(app.getPath('exe'))
     const ps1Path = join(workDir, 'apply-update.ps1')
@@ -787,14 +849,18 @@ async function installUpdate(): Promise<{ ok: boolean; message: string }> {
       'powershell.exe'
     )
     if (!fs.existsSync(psExe)) throw new Error('系统里找不到 powershell.exe')
-    const logFd = fs.openSync(join(workDir, 'apply.log'), 'a')
-    const child = spawn(psExe, ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', ps1Path], {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
-      windowsHide: true,
-    })
-    child.unref()
-    setTimeout(() => app.quit(), 700)
+    // 直接 spawn 一个子进程，主进程退出时会被一起清掉（所以之前脚本根本没跑起来）。
+    // 交给计划任务服务执行，才能真正脱离本进程存活下去。
+    const schtasks = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe')
+    if (!fs.existsSync(schtasks)) throw new Error('系统里找不到 schtasks.exe')
+    const taskArgs = `"${psExe}" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${ps1Path}"`
+    try {
+      execFileSync(schtasks, ['/create', '/f', '/tn', UPDATE_TASK_NAME, '/tr', taskArgs, '/sc', 'once', '/sd', '2000-01-01', '/st', '00:00'], { windowsHide: true })
+      execFileSync(schtasks, ['/run', '/tn', UPDATE_TASK_NAME], { windowsHide: true })
+    } catch (err) {
+      throw new Error('启动更新任务失败：' + ((err as Error).message || ''))
+    }
+    setTimeout(() => app.quit(), 1200)
     return { ok: true, message: '已下载完成，正在后台替换文件，几秒后会自动重启' }
   } catch (err) {
     try {
@@ -1093,6 +1159,11 @@ app.whenReady().then(async () => {
   })
 
   await initDatabase(getDataDir())
+  // 上次一键更新用过的计划任务，启动后清掉
+  try {
+    const schtasks = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe')
+    execFileSync(schtasks, ['/delete', '/f', '/tn', UPDATE_TASK_NAME], { windowsHide: true })
+  } catch { /* 没有残留任务就算了 */ }
   registerIpcHandlers()
   registerWindowHandlers()
   onNewItem(notifyNewItem)

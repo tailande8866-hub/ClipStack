@@ -32,68 +32,19 @@ export default function App() {
     url: string | null
     publishedAt?: string | null
   }
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
-  const [installing, setInstalling] = useState(false)
-  const [installError, setInstallError] = useState('')
-  const [progress, setProgress] = useState<{ phase: string; percent?: number; received?: number; total?: number } | null>(null)
-
   useEffect(() => {
     const api = window.electronAPI as unknown as {
       getUpdateStatus?: () => Promise<UpdateInfo | null>
-      onUpdateAvailable?: (cb: (info: UpdateInfo) => void) => () => void
-      dismissUpdate?: (v: string) => Promise<boolean>
-      openExternal?: (url: string) => Promise<unknown>
-      installUpdate?: () => Promise<{ ok: boolean; message: string }>
-      onUpdateProgress?: (cb: (p: { phase: string; percent?: number }) => void) => () => void
+      openSettings?: () => Promise<unknown>
     }
-    api.getUpdateStatus?.().then((u) => {
-      if (u && u.hasUpdate && !u.seen) setUpdateInfo(u)
-    }).catch(() => { /* 静默 */ })
-    const off = api.onUpdateAvailable?.((u) => {
-      if (u && u.hasUpdate) setUpdateInfo(u)
-    })
-    const offProgress = api.onUpdateProgress?.((p) => setProgress(p))
-    return () => { off?.(); offProgress?.() }
+    // 有新版本时不再在主面板里塞卡片，而是直接把设置窗的更新说明弹窗弹出来
+    const pop = (u: UpdateInfo | null) => {
+      if (!u || !u.hasUpdate) return
+      api.openSettings?.().catch(() => { /* 静默 */ })
+    }
+    api.getUpdateStatus?.().then((u) => pop(u)).catch(() => { /* 静默 */ })
   }, [])
 
-  const progressPercent = progress?.percent ?? 0
-  const progressText = (() => {
-    if (!progress) return '准备中…'
-    if (progress.phase === 'download') {
-      const mb = (n: number) => (n / 1024 / 1024).toFixed(1)
-      return progress.total
-        ? `正在下载 ${progressPercent}%（${mb(progress.received || 0)} / ${mb(progress.total)} MB）`
-        : `正在下载 ${mb(progress.received || 0)} MB`
-    }
-    if (progress.phase === 'extract') return '正在解压…'
-    return '正在替换文件，马上重启…'
-  })()
-
-  async function handleInstall() {
-    const api = window.electronAPI as unknown as {
-      installUpdate?: () => Promise<{ ok: boolean; message: string }>
-    }
-    setInstalling(true)
-    setProgress(null)
-    setInstallError('')
-    const r = await api.installUpdate?.()
-    if (!r) {
-      setInstalling(false)
-      return
-    }
-    if (!r.ok) {
-      setInstalling(false)
-      setProgress(null)
-      setInstallError(r.message || '更新失败')
-    }
-    // ok 时主进程会在几百毫秒后自行退出并重启，这里不做额外处理
-  }
-
-  function dismissUpdate() {
-    const v = updateInfo?.latest
-    setUpdateInfo(null)
-    if (v) (window.electronAPI as unknown as { dismissUpdate?: (v: string) => void }).dismissUpdate?.(v)
-  }
 
   // 操作反馈统一走全局提示，卡片因为列表刷新重排而丢 state 也不会漏提示
   useEffect(() => {
@@ -205,45 +156,6 @@ export default function App() {
 
       <SearchBar onSearch={handleSearch} />
 
-      {updateInfo && (
-        <div className="update-card">
-          <div className="update-head">
-            <span className="update-dot" aria-hidden="true" />
-            <strong>发现新版本 v{updateInfo.latest}</strong>
-            <span className="update-cur">当前 v{updateInfo.current}</span>
-            <button className="update-close" title="关闭" onClick={dismissUpdate}>×</button>
-          </div>
-          <div className="update-notes">
-            {(updateInfo.notes || '（这次更新没有写说明，可以直接下载新版）')
-              .replace(/\r/g, '')
-              .split('\n')
-              .filter((line) => line.trim())
-              .slice(0, 12)
-              .map((line, i) => (
-                <p key={i}>{line.replace(/^#+\s*/, '').replace(/\*\*/g, '').replace(/^[-*]\s*/, '· ')}</p>
-              ))}
-          </div>
-          <div className="update-actions">
-            {!installing && (
-              <button className="update-btn" onClick={handleInstall}>
-                {'一键更新'}
-              </button>
-            )}
-            {installing && (
-              <div className="update-progress">
-                <div className="update-progress-bar">
-                  <span style={{ width: `${progressPercent}%` }} />
-                </div>
-                <div className="update-progress-text">{progressText}</div>
-              </div>
-            )}
-            <button className="update-btn ghost" onClick={dismissUpdate}>
-              知道了
-            </button>
-          </div>
-          {installError && <div className="update-error">更新失败：{installError}</div>}
-        </div>
-      )}
       <div className="list-area">
         {items.length === 0 ? <EmptyState /> : <ClipboardList items={items} onChanged={refresh} />}
       </div>
