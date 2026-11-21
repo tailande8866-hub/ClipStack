@@ -4,7 +4,14 @@
 
 一个 Windows 桌面剪贴板历史工具。复制过的文字、截图都会被自动收进这口「栈」里，随时翻回去取用——不用再到处粘贴试探，也不怕刚截的图被下一次复制顶掉。
 
-![主面板](docs/main.png)
+<p align="center">
+  <img src="docs/main.jpg" width="56%" alt="主面板：置顶区 + 今天的历史 + 搜索框与来源筛选" />
+</p>
+
+<p align="center">
+  <img src="docs/search.jpg" width="48%" alt="搜索：输入关键词即时过滤，截图里的字也能搜到" />
+  <img src="docs/filter.jpg" width="48%" alt="来源筛选：全部 / 图片 / 文字 / 链接 / 置顶 / 按来源应用" />
+</p>
 
 <p align="center">
   <img src="docs/about.png" width="48%" alt="关于页" />
