@@ -86,8 +86,8 @@ export default function ClipboardCard({ item, onChanged, focused = false, layout
     }
     setDeleting(true)
     // 列表视图：卡片高度跟粒子一起往下收，下面的内容是一路被“顶上来”的
-    // 双排视图：格子高度固定，收高度只会留个空洞，所以只做快速淡出，马上就重排补位
-    const delay = isGrid ? 320 : 1900
+    // 双排视图：格子高度固定，收高度只会留个空洞，所以先快速淡掉，再把空洞交给列表的补位动画
+    const delay = isGrid ? 210 : 1900
     window.setTimeout(async () => {
       try {
         await window.electronAPI.deleteItem(item.id)

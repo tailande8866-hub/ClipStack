@@ -33,6 +33,7 @@ export default function ClipboardList({ items, onChanged, layout = 'list', focus
     if (!el) return
     const cards = Array.from(el.querySelectorAll<HTMLElement>('[data-item-id]'))
     const now = new Map<number, { x: number; y: number }>()
+    const moves: { card: HTMLElement; dx: number; dy: number; dist: number }[] = []
 
     cards.forEach((card) => {
       const id = Number(card.dataset.itemId)
@@ -42,17 +43,32 @@ export default function ClipboardList({ items, onChanged, layout = 'list', focus
       if (!prev || card.classList.contains('deleting')) return
       const dx = prev.x - pos.x
       const dy = prev.y - pos.y
-      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
+      const dist = Math.abs(dx) + Math.abs(dy)
+      if (dist < 1) return
+      moves.push({ card, dx, dy, dist })
+    })
+
+    lastPos.current = now
+
+    // 补位：越靠近空洞的卡片越先动、走得越远，整排顺次推过去。
+    // 之前 easeOutExpo 起手太快，看着像“啪”一下弹到位，很生硬；
+    // 现在改成两头都收的曲线（起步轻、落位轻），并把错峰拉开一点，慢慢推、慢慢停。
+    const grid = layout === 'grid'
+    moves.forEach(({ card, dx, dy, dist }) => {
+      const delay = grid ? Math.min(110, Math.round(dist / 3.2)) : 0
       card.animate(
         [
           { transform: `translate(${dx}px, ${dy}px)` },
           { transform: 'translate(0, 0)' },
         ],
-        { duration: 280, easing: 'cubic-bezier(0.22, 0.68, 0.32, 1)' },
+        {
+          duration: grid ? 600 : 420,
+          delay,
+          easing: grid ? 'cubic-bezier(0.42, 0.03, 0.2, 1)' : 'cubic-bezier(0.34, 0.02, 0.22, 1)',
+          fill: 'backwards',
+        },
       )
     })
-
-    lastPos.current = now
   }, [items, layout])
 
   if (items.length === 0) return null

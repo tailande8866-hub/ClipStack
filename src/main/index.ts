@@ -313,15 +313,20 @@ function createWindow(): void {
 
   // 拖边缘改过大小就记下来（防抖，别每移动一像素写一次库）
   let sizeTimer: ReturnType<typeof setTimeout> | null = null
+  // 只在「用户自己拖边缘」时才写库。无边框透明窗建成后实际尺寸比设定值大几像素，
+  // 启动时按实际尺寸回写会一轮轮变大（334 → 340 → 348 …），宽度就守不住了。
+  let userResizing = false
+  mainWindow.on('will-resize', () => {
+    userResizing = true
+  })
   mainWindow.on('resize', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return
+    if (!userResizing) return
     if (sizeTimer) clearTimeout(sizeTimer)
     sizeTimer = setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return
-      // 用内容区尺寸（DIP），别用 getBounds()：
-      // 窗口在 DPI 缩放变化时会收到一次 resize，getBounds 返回的是缩放后的物理值，
-      // 存进去之后面板会一次比一次宽（334 → 467 → …），列数也跟着乱变。
-      const [w, h] = mainWindow.getContentSize()
+      userResizing = false
+      const [w, h] = mainWindow.getSize()
       panelW = w
       panelH = h
       setSetting('panel_size', `${w}x${h}`)
@@ -452,14 +457,19 @@ function createSettingsWindow(): void {
     settingsWindow = null
   })
 
-  // 拖动边缘改过大小就记下来
+  // 拖动边缘改过大小就记下来（同样只在用户拖的时候写，别被启动时的自动尺寸污染）
   let settingsSizeTimer: ReturnType<typeof setTimeout> | null = null
+  let settingsUserResizing = false
+  settingsWindow.on('will-resize', () => {
+    settingsUserResizing = true
+  })
   settingsWindow.on('resize', () => {
+    if (!settingsUserResizing) return
     if (settingsSizeTimer) clearTimeout(settingsSizeTimer)
     settingsSizeTimer = setTimeout(() => {
       if (!settingsWindow || settingsWindow.isDestroyed()) return
-      // 同上：存内容区尺寸，避免 DPI 缩放把尺寸越记越大
-      const [w, h] = settingsWindow.getContentSize()
+      settingsUserResizing = false
+      const [w, h] = settingsWindow.getSize()
       setSetting('settings_size', `${w}x${h}`)
     }, 400)
   })
