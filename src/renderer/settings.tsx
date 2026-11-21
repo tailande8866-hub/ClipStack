@@ -551,13 +551,8 @@ function App() {
 
       <div className="titlebar">
         <div className="titlebar-title">
-          <span className="dot">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-              <rect x="3.6" y="6.6" width="12" height="12" rx="3" opacity="0.55" />
-              <rect x="7.6" y="3.6" width="12" height="12" rx="3" fill="rgba(255,255,255,0.4)" stroke="none" />
-              <line x1="10.8" y1="8.6" x2="16.6" y2="8.6" stroke="#2A4777" strokeWidth="1.4" />
-              <line x1="10.8" y1="11.4" x2="14.6" y2="11.4" stroke="#2A4777" strokeWidth="1.4" />
-            </svg>
+          <span className="dot" aria-hidden="true">
+            <img src={appIcon} alt="" />
           </span>
           <span>设置 · 存贴屋</span>
         </div>

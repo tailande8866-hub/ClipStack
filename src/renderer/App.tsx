@@ -6,6 +6,7 @@ import RetentionSelector from './components/RetentionSelector'
 import ClipboardList from './components/ClipboardList'
 import EmptyState from './components/EmptyState'
 import ParticleVeil from './components/ParticleVeil'
+import appIcon from './assets/app-icon.png'
 import type { HistoryFilter } from './types/clipboard'
 import { subscribeToast } from './toast'
 
@@ -255,13 +256,8 @@ export default function App() {
 
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#F4FAFF" strokeWidth="1.7" strokeLinecap="round">
-              <rect x="3.6" y="6.6" width="12" height="12" rx="3" opacity="0.55" />
-              <rect x="7.6" y="3.6" width="12" height="12" rx="3" fill="rgba(255,255,255,0.35)" stroke="none" />
-              <line x1="11" y1="8.6" x2="17" y2="8.6" stroke="#25406B" strokeWidth="1.5" />
-              <line x1="11" y1="11.6" x2="15" y2="11.6" stroke="#25406B" strokeWidth="1.5" opacity="0.8" />
-            </svg>
+          <span className="brand-mark" aria-hidden="true">
+            <img src={appIcon} alt="" />
           </span>
           <div className="brand-text">
             <h1>存贴屋</h1>
