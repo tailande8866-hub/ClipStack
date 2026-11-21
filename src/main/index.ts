@@ -81,6 +81,11 @@ const REPO = 'tailande8866-hub/ClipStack'
 const REPO_URL = `https://github.com/${REPO}`
 const ISSUES_URL = `${REPO_URL}/issues`
 const LICENSE_URL = `${REPO_URL}/blob/master/LICENSE`
+
+// 国内更新通道：Gitee 上的同名仓库，国内直连不用代理
+const GITEE_REPO = 'mingweisj/cuntiewu'
+const GITEE_REPO_URL = `https://gitee.com/${GITEE_REPO}`
+const GITEE_RELEASES_API = `https://gitee.com/api/v5/repos/${GITEE_REPO}/releases`
 const QQ_GROUP = '913838378'
 const CONTACT_EMAIL = 'duanmwsj@qq.com'
 
@@ -723,6 +728,43 @@ async function fetchLatestVersion(): Promise<{
   const timer = setTimeout(() => ac.abort(), UPDATE_CHECK_TIMEOUT)
   const headers = { 'User-Agent': 'xiaoming-clipboard', Accept: 'application/vnd.github+json' }
   try {
+    // 先问 Gitee：国内直连，包也放在那边，下载快
+    try {
+      const gRes = await net.fetch(`${GITEE_RELEASES_API}?per_page=5&direction=desc`, {
+        headers: { 'User-Agent': 'xiaoming-clipboard' },
+        signal: ac.signal,
+      })
+      if (gRes.ok) {
+        const list = (await gRes.json()) as Array<{
+          tag_name?: string
+          body?: string
+          html_url?: string
+          created_at?: string
+          prerelease?: boolean
+          assets?: Array<{ name?: string; browser_download_url?: string }>
+        }>
+        const rel = (Array.isArray(list) ? list : []).find((r) => r?.tag_name && !r.prerelease)
+        if (rel?.tag_name) {
+          const assets = rel.assets || []
+          // 优先 7z（瘦身包），其次 zip
+          const pkg =
+            assets.find((a) => /\.7z$/i.test(a.name || '')) ||
+            assets.find((a) => /\.zip$/i.test(a.name || ''))
+          return {
+            ok: true,
+            latest: String(rel.tag_name).replace(/^v/i, ''),
+            notes: rel.body || null,
+            url: rel.html_url || `${GITEE_REPO_URL}/releases`,
+            publishedAt: rel.created_at || null,
+            assetUrl: pkg?.browser_download_url || null,
+            assetName: pkg?.name || null,
+            assetSize: null,
+            assetDigest: null,
+          }
+        }
+      }
+    } catch { /* Gitee 不通再问 GitHub */ }
+
     try {
       const rel = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
         headers,
@@ -862,12 +904,15 @@ async function installUpdate(): Promise<{ ok: boolean; message: string }> {
     await fs.promises.mkdir(workDir, { recursive: true })
 
     sendUpdateProgress({ phase: 'download', received: 0, total: info.assetSize || 0, percent: 0 })
-    // GitHub 直连在国内又慢又容易断，先走加速镜像，镜像都不行再回退直连
+    // Gitee 的包国内直连就够快，不再绕加速镜像；GitHub 的包才走镜像
+    const giteeAsset = /gitee\.com/i.test(String(info.assetUrl))
     const mirrors = ['https://gh-proxy.com/', 'https://ghproxy.net/']
-    const sources: Array<{ url: string; label: string }> = [
-      ...mirrors.map((m) => ({ url: m + info.assetUrl, label: '加速通道' })),
-      { url: info.assetUrl, label: 'GitHub 直连' },
-    ]
+    const sources: Array<{ url: string; label: string }> = giteeAsset
+      ? [{ url: info.assetUrl, label: 'Gitee 国内直连' }]
+      : [
+          ...mirrors.map((m) => ({ url: m + info.assetUrl, label: '加速通道' })),
+          { url: info.assetUrl, label: 'GitHub 直连' },
+        ]
     const tarExe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
     if (!fs.existsSync(tarExe)) throw new Error('系统里找不到 tar.exe，无法解压更新包')
     const exeName = basename(app.getPath('exe'))
