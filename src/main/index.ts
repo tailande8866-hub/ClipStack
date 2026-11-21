@@ -743,7 +743,21 @@ async function fetchLatestVersion(): Promise<{
           prerelease?: boolean
           assets?: Array<{ name?: string; browser_download_url?: string }>
         }>
-        const rel = (Array.isArray(list) ? list : []).find((r) => r?.tag_name && !r.prerelease)
+        // Gitee 的列表顺序不保证最新在最前，这里自己按版本号排一遍，取最大的那个
+        const pickNewest = (a: { created_at?: string }, b: { created_at?: string }) =>
+          (b.created_at || '').localeCompare(a.created_at || '')
+        const candidates = (Array.isArray(list) ? list : [])
+          .filter((r) => r?.tag_name && !r.prerelease)
+          .sort((x, y) => {
+            const vx = String(x.tag_name).replace(/^v/i, '').split('.').map(Number)
+            const vy = String(y.tag_name).replace(/^v/i, '').split('.').map(Number)
+            for (let i = 0; i < Math.max(vx.length, vy.length); i++) {
+              const d = (vy[i] || 0) - (vx[i] || 0)
+              if (Number.isFinite(d) && d !== 0) return d
+            }
+            return pickNewest(x, y)
+          })
+        const rel = candidates[0]
         if (rel?.tag_name) {
           const assets = rel.assets || []
           // 优先 7z（瘦身包），其次 zip
