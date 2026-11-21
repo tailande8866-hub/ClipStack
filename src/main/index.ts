@@ -6,7 +6,6 @@ import {
   screen,
   Tray,
   Menu,
-  globalShortcut,
   nativeImage,
   ipcMain,
   dialog,
@@ -1545,10 +1544,9 @@ app.whenReady().then(async () => {
 
   setTimeout(() => { blurHideReady = true }, 1500)
 
-  // 以前是 Ctrl+Shift+V，可这个组合在浏览器、Word、WPS 里是"粘贴为纯文本"，
-  // 用户在别的软件里一按，面板就被我们抢过来弹开了（"自己时不时弹面板"的另一个元凶）。
-  // 换成几乎不冲突的组合。
-  globalShortcut.register('Ctrl+Alt+Shift+V', () => toggleWindow())
+  // 全局快捷键整个去掉了：Ctrl+Shift+V 跟浏览器、Word、WPS 的"粘贴为纯文本"撞车，
+  // 换成别的组合用户也用不上，还容易被误触发把面板弹出来。
+  // 打开面板只保留两种方式：点悬浮球、点托盘菜单。
 
   // 系统睡眠/锁屏唤醒后：窗口容易失去置顶并被"冻住"，这里把它重新拉回可交互状态
   const recoverAfterWake = () => {
