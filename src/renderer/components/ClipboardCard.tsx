@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef, useState } from 'react'
 import type { ClipboardItem } from '../types/clipboard'
 import TextCard from './TextCard'
 import ImageCard from './ImageCard'
 import { showToast } from '../toast'
+import { burstDissolve } from '../dissolve'
 
 interface Props {
   item: ClipboardItem
@@ -25,27 +25,9 @@ export default function ClipboardCard({ item, onChanged, focused = false, layout
   const cardRef = useRef<HTMLDivElement>(null)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [deleting, setDeleting] = useState(false)
-  // 粒子层要脱离卡片（卡片会整体淡出、还会位移，挂里面会被一起糊掉），
-  // 所以删除时按卡片当前屏幕位置另外起一层 fixed 层
-  const [dissolveRect, setDissolveRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  // 列表视图删除时卡片要一边散一边把高度收掉，这里记住它原来的高度
+  const [cardH, setCardH] = useState<number | null>(null)
   const feedbackTimer = useRef<number | null>(null)
-
-  // 删除粒子：卡片外框先淡掉，里面的东西化成细沙一样的白色微粒飘散
-  // 单色、细小、密集；一次性算好随机位置/方向，避免每次 render 都重排
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 450 }, () => ({
-        px: 3 + Math.random() * 94, // 撒满整张卡片
-        py: 3 + Math.random() * 94,
-        tx: 4 + Math.random() * 44, // 轻微往右上飘
-        ty: -4 - Math.random() * 32,
-        delay: 150 + Math.random() * 320,
-        dur: 820 + Math.random() * 480,
-        size: 1 + Math.random() * 1.7,
-        hue: Math.random() < 0.82 ? 'rgba(255, 255, 255, 0.92)' : 'rgba(214, 232, 252, 0.9)',
-      })),
-    [],
-  )
 
   function flashCard(kind: 'copy' | 'pin' = 'copy') {
     const el = cardRef.current
@@ -96,21 +78,22 @@ export default function ClipboardCard({ item, onChanged, focused = false, layout
     if (deleting) return
     const el = cardRef.current
     const isGrid = layout === 'grid'
-    if (el && !isGrid) {
+    // 粒子层单独挂在 body 上，卡片什么时候移除都不影响它飘完
+    if (el) {
       const r = el.getBoundingClientRect()
-      setDissolveRect({ left: r.left, top: r.top, width: r.width, height: r.height })
+      burstDissolve({ left: r.left, top: r.top, width: r.width, height: r.height })
+      if (!isGrid) setCardH(r.height)
     }
     setDeleting(true)
     // 列表视图：卡片高度跟粒子一起往下收，下面的内容是一路被“顶上来”的
-    // 双排视图：格子高度固定，收高度只会留个空洞，所以只做一次快速淡出，剩下的交给补位动画
-    const delay = isGrid ? 260 : 1900
+    // 双排视图：格子高度固定，收高度只会留个空洞，所以只做快速淡出，马上就重排补位
+    const delay = isGrid ? 320 : 1900
     window.setTimeout(async () => {
       try {
         await window.electronAPI.deleteItem(item.id)
         onChanged()
       } catch {
         setDeleting(false)
-        setDissolveRect(null)
         showToast('删除失败')
       }
     }, delay)
@@ -123,7 +106,7 @@ export default function ClipboardCard({ item, onChanged, focused = false, layout
       data-item-id={item.id}
       data-item-type={item.type}
       data-item-pin={item.is_pinned ? '1' : '0'}
-      style={dissolveRect ? ({ ['--dh' as string]: `${dissolveRect.height}px` } as React.CSSProperties) : undefined}
+      style={cardH ? ({ ['--dh' as string]: `${cardH}px` } as React.CSSProperties) : undefined}
     >
       {item.type === 'text' ? <TextCard item={item} onCopy={handleCopy} /> : <ImageCard item={item} onCopy={handleCopy} />}
 
@@ -142,33 +125,6 @@ export default function ClipboardCard({ item, onChanged, focused = false, layout
           {BADGE_TEXT[feedback]}
         </span>
       )}
-
-      {deleting && dissolveRect &&
-        createPortal(
-          <div
-            className="dissolve-layer"
-            aria-hidden="true"
-            style={{ left: dissolveRect.left, top: dissolveRect.top, width: dissolveRect.width, height: dissolveRect.height }}
-          >
-            {particles.map((p, i) => (
-              <span
-                key={i}
-                className="dissolve-dot"
-                style={{
-                  ['--px' as string]: `${p.px.toFixed(1)}%`,
-                  ['--py' as string]: `${p.py.toFixed(1)}%`,
-                  ['--tx' as string]: `${p.tx.toFixed(1)}px`,
-                  ['--ty' as string]: `${p.ty.toFixed(1)}px`,
-                  ['--delay' as string]: `${p.delay.toFixed(0)}ms`,
-                  ['--dur' as string]: `${p.dur.toFixed(0)}ms`,
-                  ['--dot' as string]: `${p.size.toFixed(1)}px`,
-                  ['--dot-hue' as string]: p.hue,
-                }}
-              />
-            ))}
-          </div>,
-          document.body,
-        )}
 
       <div className="card-actions">
         <button

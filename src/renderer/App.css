@@ -747,9 +747,11 @@ html, body, #root {
 }
 
 /* ============ 网格视图 ============ */
+/* 网格视图：固定两列。以前用 auto-fill + minmax(118px,1fr)，面板一拉宽就自己变成三列四列，
+   看着跟列表视图完全不是一套东西。这里锁死两列，卡片自己均分宽度。 */
 .clipboard-list.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-items: stretch;
 }
@@ -1057,7 +1059,7 @@ html, body, #root {
 /* 双排里删除：格子高度是固定的，收高度只会留个空洞。
    所以这里只做一次很快的淡出 + 轻微缩小，然后靠列表的补位动画把后面的卡片滑上来 */
 .clipboard-list.grid .clipboard-card.deleting {
-  animation: grid-card-out 220ms ease-out forwards;
+  animation: grid-card-out 300ms ease-out forwards;
 }
 
 .clipboard-list.grid .clipboard-card.deleting > .text-card,
