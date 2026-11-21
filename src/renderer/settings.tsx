@@ -7,6 +7,7 @@ import heroArt from './assets/hero-aurora.jpg'
 import type { SettingsInfo, UpdateProgress, ClipboardItem } from './types/clipboard'
 import { formatTime } from './utils/time'
 import { initTheme, setThemeClass } from './theme'
+import ParticleVeil from './components/ParticleVeil'
 
 type TabKey = 'general' | 'storage' | 'feedback' | 'about'
 
@@ -545,7 +546,7 @@ function App() {
         <span className="blob b2" />
         <span className="blob b3" />
       </div>
-      <div className="dust" aria-hidden="true" />
+      <ParticleVeil kind="starfield" />
       <div className="sheen" aria-hidden="true" />
 
       <div className="titlebar">

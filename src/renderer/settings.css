@@ -191,10 +191,20 @@ body {
   background-size: 140px 140px;
 }
 
-#root > *:not(.ambient):not(.dust):not(.sheen) {
+#root > *:not(.ambient):not(.dust):not(.sheen):not(.fx-veil) {
   position: relative;
   z-index: 2;
 }
+
+/* 星空粒子层：铺满整窗，内容压在它上面 */
+.fx-veil {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+.fx-veil canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* 环境层 */
 .ambient {

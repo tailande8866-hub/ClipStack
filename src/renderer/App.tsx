@@ -5,6 +5,7 @@ import SearchBar from './components/SearchBar'
 import RetentionSelector from './components/RetentionSelector'
 import ClipboardList from './components/ClipboardList'
 import EmptyState from './components/EmptyState'
+import ParticleVeil from './components/ParticleVeil'
 import type { HistoryFilter } from './types/clipboard'
 import { subscribeToast } from './toast'
 
@@ -249,7 +250,7 @@ export default function App() {
       </div>
       <div className="dust" aria-hidden="true" />
       <div className="sheen" aria-hidden="true" />
-      <div className="dot-veil" aria-hidden="true" />
+      <ParticleVeil kind="silver" />
 
 
       <header className="app-header">
