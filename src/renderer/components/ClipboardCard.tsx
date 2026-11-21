@@ -66,6 +66,8 @@ export default function ClipboardCard({ item, onChanged, focused = false }: Prop
       if (ok) {
         flashCard('copy')
         setFeedbackOnce('copied')
+        // 设置里开了「复制后自动粘贴」就切回刚才那个窗口把内容贴进去
+        window.electronAPI.pasteBackToPrevious?.().catch(() => { /* 忽略 */ })
       } else {
         showToast('复制失败')
       }

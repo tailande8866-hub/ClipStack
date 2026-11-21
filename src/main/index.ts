@@ -30,6 +30,13 @@ import {
 } from './database'
 import { startMonitoring, stopMonitoring, onNewItem, runOcrBackfill } from './clipboard-monitor'
 import { runImageCompaction } from './image-compact'
+import {
+  captureForegroundWindow,
+  pasteBackToWindow,
+  warmUpForegroundHelper,
+  readForeground,
+  isOwnProcess,
+} from './previous-window'
 import { registerIpcHandlers, setMainWindow, notifyNewItem } from './ipc-handlers'
 import { startCleanupScheduler, stopCleanupScheduler } from './cleanup-scheduler'
 import {
@@ -51,6 +58,8 @@ let isQuitting = false
 let blurHideReady = false
 // 主面板被"收起"时不是 hide()，而是挪到屏幕外；用它记录这个状态
 let panelParked = false
+// 呼出面板之前的前台窗口句柄，复制后可以粘贴回去
+let lastForegroundHwnd = ''
 
 const MAIN_W = 320
 const MAIN_H = 440
@@ -372,11 +381,11 @@ function createSettingsWindow(): void {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 780,
-    height: 600,
+    width: 1020,
+    height: 800,
     icon: appIconPath(),
-    minWidth: 780,
-    minHeight: 600,
+    minWidth: 900,
+    minHeight: 660,
     frame: false,
     transparent: false,
     backgroundColor: '#12161F',
@@ -458,19 +467,33 @@ function expandFromFloat(): void {
   hideFloat()
   if (!mainWindow || mainWindow.isDestroyed()) return
   const { x, y } = getWindowPosition()
-  panelParked = false
-  // 位置、透明度、鼠标穿透都在 show 之前就设好，避免"刚打开那一下"状态没齐
-  mainWindow.setPosition(x, y)
-  mainWindow.setIgnoreMouseEvents(false)
-  mainWindow.show()
-  mainWindow.setOpacity(1)
-  // Windows 会限制后台程序抢前台，导致面板刚弹出时第一下点击只用来"激活窗口"
-  // （表现就是"刚打开那一瞬间点不动"）。steal 强制把应用拉前台，show 后立即聚焦。
-  app.focus({ steal: true })
-  mainWindow.focus()
-  mainWindow.webContents.focus()
-  blurHideReady = false
-  setTimeout(() => { blurHideReady = true }, 1500)
+  let shown = false
+  const showPanel = () => {
+    if (shown) return
+    shown = true
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    panelParked = false
+    // 位置、透明度、鼠标穿透都在 show 之前就设好，避免"刚打开那一下"状态没齐
+    mainWindow.setPosition(x, y)
+    mainWindow.setIgnoreMouseEvents(false)
+    mainWindow.show()
+    mainWindow.setOpacity(1)
+    // Windows 会限制后台程序抢前台，导致面板刚弹出时第一下点击只用来"激活窗口"
+    // （表现就是"刚打开那一瞬间点不动"）。steal 强制把应用拉前台，show 后立即聚焦。
+    app.focus({ steal: true })
+    mainWindow.focus()
+    mainWindow.webContents.focus()
+    blurHideReady = false
+    setTimeout(() => { blurHideReady = true }, 1500)
+  }
+  // 抢焦点之前先记下用户刚才所在的窗口。
+  // 助手是常驻进程（10ms 级响应），但万一没准备好也绝不等：直接弹面板，
+  // 用后台轮询（startForegroundWatcher）已经记下的那个句柄兜底。
+  captureForegroundWindow(260)
+    .then((h) => { if (h) lastForegroundHwnd = h })
+    .catch(() => { /* 拿不到就算了 */ })
+    .finally(showPanel)
+  setTimeout(showPanel, 220)
 }
 
 function toggleWindow(): void {
@@ -480,6 +503,27 @@ function toggleWindow(): void {
   } else {
     expandFromFloat()
   }
+}
+
+/**
+ * 后台记住"用户正在哪个窗口"：面板收起时每 700ms 问一次常驻助手。
+ * 这样呼出面板那一刻不需要抢时间——哪怕助手刚好没响应，也有上一轮记下的句柄兜底。
+ */
+function startForegroundWatcher(): void {
+  let busy = false
+  setInterval(() => {
+    if (busy) return
+    if (isPanelShown() || panelParked === false) return
+    busy = true
+    readForeground(300)
+      .then((info) => {
+        if (!info || !info.hwnd || info.hwnd === '0') return
+        if (isOwnProcess(info.proc)) return
+        lastForegroundHwnd = info.hwnd
+      })
+      .catch(() => { /* 忽略 */ })
+      .finally(() => { busy = false })
+  }, 700)
 }
 function createTray(): void {
   tray = new Tray(createTrayIcon())
@@ -1145,6 +1189,13 @@ function registerWindowHandlers(): void {
     saveFloatPosition()
   })
   ipcMain.on('window:expand', () => expandFromFloat())
+
+  // 复制完把内容粘回刚才那个窗口（设置里默认关闭）
+  ipcMain.handle('clipboard:paste-back', async () => {
+    if (getSetting('paste_after_copy') !== '1') return false
+    if (!lastForegroundHwnd) return false
+    return pasteBackToWindow(lastForegroundHwnd)
+  })
   ipcMain.on('window:settings', () => createSettingsWindow())
   ipcMain.on('window:menu', () => {
     if (!floatWindow || floatWindow.isDestroyed()) return
@@ -1274,7 +1325,9 @@ app.whenReady().then(async () => {
   onNewItem(notifyNewItem)
   startMonitoring()
   startCleanupScheduler()
-  // 老截图补做 OCR：每 60 秒两张，慢慢补齐，不卡剪贴板监听
+  // 前台窗口助手先热起来，之后查"刚才在哪个窗口"不用等 PowerShell 启动
+  try { warmUpForegroundHelper() } catch { /* 忽略 */ }
+  startForegroundWatcher()
   setInterval(() => { try { runOcrBackfill() } catch { /* 忽略 */ } }, 60000)
   // 历史大图慢慢压：每 90 秒处理 2 张，不抢前台体验
   setInterval(() => { try { runImageCompaction(2) } catch { /* 忽略 */ } }, 90000)

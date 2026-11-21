@@ -100,6 +100,7 @@ export default function App() {
             setToastMsg('已复制')
             window.clearTimeout(toastTimer.current)
             toastTimer.current = window.setTimeout(() => setToastMsg(''), 1600)
+            window.electronAPI.pasteBackToPrevious?.().catch(() => { /* 忽略 */ })
           }
         }).catch(() => { /* 忽略 */ })
         return

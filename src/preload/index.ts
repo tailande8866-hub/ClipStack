@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyToClipboard: (id: number) =>
     ipcRenderer.invoke('clipboard:copy', id),
 
+  pasteBackToPrevious: () => ipcRenderer.invoke('clipboard:paste-back'),
+
   diagLog: (msg: string) =>
     ipcRenderer.invoke('diag:log', msg),
 
@@ -83,6 +85,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (): void => callback()
     ipcRenderer.on('data:changed', listener)
     return () => ipcRenderer.removeListener('data:changed', listener)
+  },
+
+  onThemeChanged: (callback: (theme: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, theme: string): void => callback(theme)
+    ipcRenderer.on('theme:changed', listener)
+    return () => ipcRenderer.removeListener('theme:changed', listener)
   },
 
   openExternal: (url: string) => ipcRenderer.invoke('settings:open-external', url),

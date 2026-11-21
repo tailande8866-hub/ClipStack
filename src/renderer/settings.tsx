@@ -6,6 +6,7 @@ import appIcon from './assets/app-icon.png'
 import heroArt from './assets/hero-aurora.jpg'
 import type { SettingsInfo, UpdateProgress, ClipboardItem } from './types/clipboard'
 import { formatTime } from './utils/time'
+import { initTheme, setThemeClass } from './theme'
 
 type TabKey = 'general' | 'storage' | 'feedback' | 'about'
 
@@ -202,6 +203,10 @@ function App() {
   // 隐私
   const [sensitiveSkip, setSensitiveSkip] = useState(true)
   const [sensitiveExtra, setSensitiveExtra] = useState('')
+  // 复制后自动粘贴
+  const [pasteBack, setPasteBack] = useState(false)
+  // 外观
+  const [themeLight, setThemeLight] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -228,6 +233,12 @@ function App() {
     })
     window.electronAPI.getSetting('sensitive_extra').then((v) => {
       if (v) setSensitiveExtra(v)
+    })
+    window.electronAPI.getSetting('paste_after_copy').then((v) => {
+      setPasteBack(v === '1')
+    })
+    window.electronAPI.getSetting('theme').then((v) => {
+      setThemeLight(v === 'light')
     })
     const off = window.electronAPI.onUpdateAvailable((u) => {
       setCheckResult(u)
@@ -312,6 +323,26 @@ function App() {
     setTrashKeep(v)
     await window.electronAPI.setSetting('trash_keep_days', v)
     setNotice({ type: 'ok', text: `回收站保留 ${v} 天，超期自动彻底清空。` })
+  }
+
+  async function togglePasteBack() {
+    const next = !pasteBack
+    setPasteBack(next)
+    await window.electronAPI.setSetting('paste_after_copy', next ? '1' : '0')
+    setNotice({
+      type: 'ok',
+      text: next
+        ? '已开启：点卡片复制后会自动切回刚才的窗口并粘贴。'
+        : '已关闭：复制后仍留在剪贴栈面板，需要自己切窗口粘贴。',
+    })
+  }
+
+  async function toggleTheme() {
+    const next = !themeLight
+    setThemeLight(next)
+    setThemeClass(next ? 'light' : 'dark')
+    await window.electronAPI.setSetting('theme', next ? 'light' : 'dark')
+    setNotice({ type: 'ok', text: next ? '已切换为浅色主题。' : '已切换回深色主题。' })
   }
 
   async function toggleSensitiveSkip() {
@@ -590,9 +621,40 @@ function App() {
                     aria-label="开机自动启动"
                   />
                 </div>
+
+                <div className="row">
+                  <div>
+                    <div className="row-label">复制后自动粘贴回去</div>
+                    <div className="row-hint">
+                      点卡片复制后，自动切回你刚才在用的窗口按一次 Ctrl+V。默认关闭：打开后每次复制都会把焦点交还给那个窗口。
+                    </div>
+                  </div>
+                  <button
+                    className={`switch ${pasteBack ? 'on' : ''}`}
+                    onClick={togglePasteBack}
+                    aria-label="复制后自动粘贴回去"
+                  />
+                </div>
               </div>
 
               {notice && <div className={`notice notice-${notice.type}`}>{notice.text}</div>}
+
+              <div className="section-label">外观</div>
+              <div className="card">
+                <div className="row">
+                  <div>
+                    <div className="row-label">浅色主题</div>
+                    <div className="row-hint">
+                      面板、设置页和悬浮球一起换成浅色玻璃；关掉回到默认的深色。
+                    </div>
+                  </div>
+                  <button
+                    className={`switch ${themeLight ? 'on' : ''}`}
+                    onClick={toggleTheme}
+                    aria-label="浅色主题"
+                  />
+                </div>
+              </div>
 
               <div className="section-label">隐私</div>
               <div className="card">
@@ -697,18 +759,17 @@ function App() {
                       到期和手动删除的记录先放这里，图片文件都还留着；超过保留天数才彻底清空。
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span className="badge badge-default">保留 {trashKeep} 天</span>
+                  <div className="trash-head">
                     <select
                       className="retention-select"
                       value={trashKeep}
                       onChange={(e) => changeTrashKeep(e.target.value)}
                       disabled={trashBusy}
                     >
-                      <option value="3">3 天</option>
-                      <option value="7">7 天</option>
-                      <option value="30">30 天</option>
-                      <option value="90">90 天</option>
+                      <option value="3">保留 3 天</option>
+                      <option value="7">保留 7 天</option>
+                      <option value="30">保留 30 天</option>
+                      <option value="90">保留 90 天</option>
                     </select>
                     <button className="btn" onClick={loadTrash} disabled={trashBusy}>刷新</button>
                     <button
@@ -995,6 +1056,8 @@ function App() {
     </>
   )
 }
+
+initTheme()
 
 createRoot(document.getElementById('root')!).render(<App />)
 

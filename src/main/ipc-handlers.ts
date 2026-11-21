@@ -128,6 +128,12 @@ export function registerIpcHandlers(): void {
         setSetting('retention_started_at', '0')
       }
     }
+    if (key === 'theme') {
+      // 三个窗口（面板 / 悬浮球 / 设置）一起换肤
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('theme:changed', value)
+      }
+    }
   })
 }
 

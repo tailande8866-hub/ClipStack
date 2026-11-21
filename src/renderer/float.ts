@@ -1,4 +1,7 @@
 import './float.css'
+import { initTheme } from './theme'
+
+initTheme()
 
 const root = document.getElementById('root')!
 
