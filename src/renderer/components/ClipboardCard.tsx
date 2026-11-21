@@ -9,6 +9,8 @@ interface Props {
   item: ClipboardItem
   onChanged: () => void
   focused?: boolean
+  /** 双排（grid）里删除要快、不要收高度，否则卡片会长时间占着格子 */
+  layout?: 'list' | 'grid'
 }
 
 type Feedback = null | 'copied' | 'pinned' | 'unpinned'
@@ -19,7 +21,7 @@ const BADGE_TEXT: Record<Exclude<Feedback, null>, string> = {
   unpinned: '已取消置顶',
 }
 
-export default function ClipboardCard({ item, onChanged, focused = false }: Props) {
+export default function ClipboardCard({ item, onChanged, focused = false, layout = 'list' }: Props) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [deleting, setDeleting] = useState(false)
@@ -93,12 +95,15 @@ export default function ClipboardCard({ item, onChanged, focused = false }: Prop
   async function handleDelete() {
     if (deleting) return
     const el = cardRef.current
-    if (el) {
+    const isGrid = layout === 'grid'
+    if (el && !isGrid) {
       const r = el.getBoundingClientRect()
       setDissolveRect({ left: r.left, top: r.top, width: r.width, height: r.height })
     }
     setDeleting(true)
-    // 卡片高度跟粒子一起往下收，下面的内容是一路被“顶上来”的，不是最后一跳
+    // 列表视图：卡片高度跟粒子一起往下收，下面的内容是一路被“顶上来”的
+    // 双排视图：格子高度固定，收高度只会留个空洞，所以只做一次快速淡出，剩下的交给补位动画
+    const delay = isGrid ? 260 : 1900
     window.setTimeout(async () => {
       try {
         await window.electronAPI.deleteItem(item.id)
@@ -108,7 +113,7 @@ export default function ClipboardCard({ item, onChanged, focused = false }: Prop
         setDissolveRect(null)
         showToast('删除失败')
       }
-    }, 1900)
+    }, delay)
   }
 
   return (

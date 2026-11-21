@@ -416,12 +416,20 @@ html, body, #root {
   width: 25px;
   height: 25px;
   padding: 0;
-  border: 1px solid var(--w-240);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 8px;
-  background: var(--w-95);
-  color: var(--ink);
+  background: rgba(255, 255, 255, 0.14);
+  color: #EAF3FF;
   cursor: pointer;
   transition: background 160ms var(--ease), color 160ms var(--ease), border-color 160ms var(--ease);
+}
+
+.header-btn svg { stroke-width: 2.1; }
+
+[data-theme='light'] .header-btn {
+  border-color: rgba(20, 32, 51, 0.22);
+  background: rgba(255, 255, 255, 0.86);
+  color: #182740;
 }
 
 .header-btn:hover {
@@ -950,7 +958,7 @@ html, body, #root {
   align-items: center;
   gap: 5px;
   padding: 0 8px 8px;
-  opacity: 0.82;
+  opacity: 1;
 }
 
 .copy-toast {
@@ -1046,6 +1054,23 @@ html, body, #root {
   animation-fill-mode: both;
 }
 
+/* 双排里删除：格子高度是固定的，收高度只会留个空洞。
+   所以这里只做一次很快的淡出 + 轻微缩小，然后靠列表的补位动画把后面的卡片滑上来 */
+.clipboard-list.grid .clipboard-card.deleting {
+  animation: grid-card-out 220ms ease-out forwards;
+}
+
+.clipboard-list.grid .clipboard-card.deleting > .text-card,
+.clipboard-list.grid .clipboard-card.deleting > .image-card,
+.clipboard-list.grid .clipboard-card.deleting > .card-actions {
+  animation: none;
+}
+
+@keyframes grid-card-out {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.92); }
+}
+
 @keyframes card-dissolve {
   0%   { opacity: 1; }
   40%  { opacity: 0.55; }
@@ -1117,13 +1142,23 @@ html, body, #root {
   justify-content: center;
   width: 29px;
   height: 26px;
-  border: 1px solid var(--w-320);
-  background: var(--w-170);
-  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.20);
+  color: #F2F8FF;
   border-radius: 9px;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--w-280), 0 1px 3px rgba(3, 8, 18, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 2px 6px rgba(3, 8, 18, 0.34);
   transition: background 150ms var(--ease), color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+/* 图标本身加粗一点点，小尺寸下才看得出是复制/置顶/删除 */
+.action-btn svg { stroke-width: 2.2; }
+
+[data-theme='light'] .action-btn {
+  border-color: rgba(20, 32, 51, 0.24);
+  background: rgba(255, 255, 255, 0.9);
+  color: #16233A;
+  box-shadow: inset 0 1px 0 #FFFFFF, 0 1px 3px rgba(16, 26, 44, 0.14);
 }
 
 .action-btn:hover { background: var(--a-260); border-color: var(--t-29); color: var(--ink); }

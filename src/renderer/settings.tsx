@@ -913,7 +913,7 @@ function App() {
                   <div className="hero-text">
                     <div className="about-name">存贴屋</div>
                     <div className="about-sub">你的复制截图历史仓库</div>
-                    <div className="about-ver">ClipStack · v{info?.version || '1.1.0'} · Windows</div>
+                    <div className="about-ver">存贴屋 · v{info?.version || '1.1.0'} · Windows</div>
                   </div>
                 </div>
               </div>

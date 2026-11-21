@@ -394,9 +394,9 @@ function createFloatWindow(): void {
     floatWindow = null
   })
 
-  // 启动后要能看到悬浮球（主面板不自动弹出）
+  // 开机自启：只露一颗悬浮球；手动双击启动：直接给面板，球先收着（面板一收起球自己会回来）
   floatWindow.once('ready-to-show', () => {
-    showFloat()
+    if (isAutostart) showFloat()
   })
 
   if (process.env.NODE_ENV === 'development') {
@@ -413,16 +413,27 @@ function createSettingsWindow(): void {
     return
   }
 
+  // 设置窗的宽高按用户画的红线来：默认 1150×760，拖过之后记住，下次还是这个尺寸
+  const savedSettingsSize = getSetting('settings_size')
+  let settingsW = 1150
+  let settingsH = 760
+  const sm = savedSettingsSize ? /^(\d{3,4})\s*[x×*]\s*(\d{3,4})$/.exec(savedSettingsSize) : null
+  if (sm) {
+    const area = screen.getPrimaryDisplay().workAreaSize
+    settingsW = Math.min(Math.max(980, parseInt(sm[1], 10)), area.width - 24)
+    settingsH = Math.min(Math.max(640, parseInt(sm[2], 10)), area.height - 24)
+  }
+
   settingsWindow = new BrowserWindow({
-    width: 1020,
-    height: 800,
+    width: settingsW,
+    height: settingsH,
     icon: appIconPath(),
-    minWidth: 900,
-    minHeight: 660,
+    minWidth: 980,
+    minHeight: 640,
     frame: false,
     transparent: false,
     backgroundColor: '#12161F',
-    resizable: false,
+    resizable: true,
     maximizable: false,
     skipTaskbar: false,
     show: false,
@@ -438,10 +449,37 @@ function createSettingsWindow(): void {
     settingsWindow = null
   })
 
+  // 拖动边缘改过大小就记下来
+  let settingsSizeTimer: ReturnType<typeof setTimeout> | null = null
+  settingsWindow.on('resize', () => {
+    if (settingsSizeTimer) clearTimeout(settingsSizeTimer)
+    settingsSizeTimer = setTimeout(() => {
+      if (!settingsWindow || settingsWindow.isDestroyed()) return
+      const b = settingsWindow.getBounds()
+      setSetting('settings_size', `${b.width}x${b.height}`)
+    }, 400)
+  })
+
   settingsWindow.once('ready-to-show', () => {
     settingsWindow?.show()
     settingsWindow?.focus()
   })
+
+  // 兜底：个别情况下 ready-to-show 不触发（主面板是隐藏状态、渲染进程复用缓存等），
+  // 窗口会一直挂在屏幕外不可见。所以页面加载完成时、以及加载后 1.5 秒各再 show 一次。
+  settingsWindow.webContents.once('did-finish-load', () => {
+    settingsWindow?.show()
+    settingsWindow?.focus()
+  })
+  for (const delay of [800, 1500]) {
+    setTimeout(() => {
+      if (!settingsWindow || settingsWindow.isDestroyed()) return
+      if (!settingsWindow.isVisible()) {
+        settingsWindow.show()
+        settingsWindow.focus()
+      }
+    }, delay)
+  }
 
   if (process.env.NODE_ENV === 'development') {
     settingsWindow.loadURL('http://localhost:5173/settings.html')
@@ -483,6 +521,9 @@ function collapseToFloat(): void {
 
 function showFloat(): void {
   if (!floatWindow || floatWindow.isDestroyed()) return
+  // 主面板或设置窗正开着的时候别再冒出悬浮球
+  if (isPanelShown()) return
+  if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) return
   const { x, y } = getFloatPosition()
   floatWindow.setPosition(x, y)
   if (!floatWindow.isVisible()) {
@@ -492,7 +533,9 @@ function showFloat(): void {
 
 function hideFloat(): void {
   if (!floatWindow || floatWindow.isDestroyed()) return
-  if (floatWindow.isVisible()) floatWindow.hide()
+  // 别用 isVisible() 判断：无边框 + focusable:false 的透明窗，isVisible() 有时会报 false，
+  // 结果 hide() 根本不执行，悬浮球就一直挂在屏幕上。hide() 本身是幂等的，直接调。
+  floatWindow.hide()
 }
 
 /** 由悬浮小球展开主面板 */
@@ -755,24 +798,9 @@ async function runUpdateCheck(): Promise<Omit<UpdateResult, 'time'>> {
   }
   lastUpdateCheck = { time: Date.now(), ...result }
 
-  // 有新版本就先弹窗：直接打开设置窗，把更新说明弹窗弹出来（不再在主面板塞卡片）
+  // 有新版本只在主面板里提示，绝不在启动时自己弹设置窗
+  // （以前这里会 createSettingsWindow，用户双击图标一打开先看见设置面板，像“打开一片黑”）
   if (hasUpdate && !result.seen) {
-    if (!settingsWindow || settingsWindow.isDestroyed()) {
-      createSettingsWindow()
-    } else {
-      settingsWindow.show()
-      settingsWindow.focus()
-    }
-    const push = () => {
-      if (settingsWindow && !settingsWindow.isDestroyed()) {
-        settingsWindow.webContents.send('update:available', lastUpdateCheck)
-      }
-    }
-    if (settingsWindow && settingsWindow.webContents.isLoading()) {
-      settingsWindow.webContents.once('did-finish-load', () => setTimeout(push, 300))
-    } else {
-      setTimeout(push, 600)
-    }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:available', lastUpdateCheck)
   }
   return result
@@ -1331,6 +1359,10 @@ function registerWindowHandlers(): void {
 
 app.setAppUserModelId('com.floatpaste.app')
 
+// 开机自启时带这个参数：只留悬浮球，不自动弹主面板
+const AUTOSTART_ARG = '--autostart'
+const isAutostart = process.argv.includes(AUTOSTART_ARG)
+
 // 单实例锁：避免重复启动时注册出第二个托盘图标（Windows 会因此弹出托盘溢出面板）
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -1376,13 +1408,31 @@ app.whenReady().then(async () => {
   // 历史大图慢慢压：每 90 秒处理 2 张，不抢前台体验
   setInterval(() => { try { runImageCompaction(2) } catch { /* 忽略 */ } }, 90000)
 
-  app.setLoginItemSettings({ openAtLogin: true })
+  app.setLoginItemSettings({ openAtLogin: true, args: [AUTOSTART_ARG] })
 
   createWindow()
   createFloatWindow()
   createTray()
 
-  // 启动时只保留悬浮球，不再自动弹出主面板（避免开机/重开时"自己弹出来"）
+  // 双击桌面图标 = 手动启动：直接把主面板弹出来。
+  // 以前这里只留一颗悬浮球，用户看到的像“打开了但一片黑/什么都没出来”；
+  // 开机自启（带 --autostart）才安静地只留悬浮球，不打扰。
+  if (!isAutostart) {
+    const openPanelOnStart = () => {
+      if (!isPanelShown()) expandFromFloat()
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.once('did-finish-load', () => setTimeout(openPanelOnStart, 150))
+    }
+    setTimeout(openPanelOnStart, 1200)
+    // 悬浮球的 ready-to-show 可能比面板晚到，这里多扫几次，面板开着就把球收起来
+    for (const d of [1500, 2500, 4000, 6000]) {
+      setTimeout(() => {
+        if (isPanelShown()) hideFloat()
+      }, d)
+    }
+  }
+
   setTimeout(() => { blurHideReady = true }, 1500)
 
   globalShortcut.register('Ctrl+Shift+V', toggleWindow)
