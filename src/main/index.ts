@@ -140,6 +140,31 @@ function getWindowPosition(): { x: number; y: number } {
 
 const FLOAT_POS_FILE = 'float-pos.json'
 
+// 窗口比球体大一圈（留给光圈渐隐），所以窗口能到屏幕边缘时，球体其实还差一圈。
+// 这里把允许范围按这圈余量往外扩，球体才能真正贴到屏幕最下面、最左边。
+const FLOAT_BALL = 46
+const FLOAT_PAD = (FLOAT_SIZE - FLOAT_BALL) / 2
+
+/**
+ * 把悬浮窗位置钳到可见区域内。
+ * 窗口比球体大一圈（留给光圈渐隐），所以范围要按这圈余量往外放宽，
+ * 球体才能真正落到最下面、最右边——之前"拖不到底"就是因为按窗口边缘算的。
+ */
+function clampFloatPos(
+  px: number,
+  py: number,
+  area: { x: number; y: number; width: number; height: number },
+): { x: number; y: number } {
+  const minX = area.x - FLOAT_PAD
+  const maxX = area.x + area.width - FLOAT_SIZE + FLOAT_PAD
+  const minY = area.y - FLOAT_PAD
+  const maxY = area.y + area.height - FLOAT_SIZE + FLOAT_PAD
+  return {
+    x: Math.round(Math.min(Math.max(px, minX), maxX)),
+    y: Math.round(Math.min(Math.max(py, minY), maxY)),
+  }
+}
+
 function readFloatPos(): { x: number; y: number } | null {
   try {
     const raw = fs.readFileSync(join(app.getPath('userData'), FLOAT_POS_FILE), 'utf-8')
@@ -155,17 +180,11 @@ function readFloatPos(): { x: number; y: number } | null {
 
 function getFloatPosition(): { x: number; y: number } {
   const display = screen.getPrimaryDisplay()
-  const { width, height } = display.workArea
+  const area = display.workArea
   // 用户拖动过悬浮球就把位置记下来，下次开机/重开还在原处
   const saved = readFloatPos()
-  if (saved) {
-    const maxX = width - FLOAT_SIZE
-    const maxY = height - FLOAT_SIZE
-    return {
-      x: Math.min(Math.max(saved.x, 0), maxX),
-      y: Math.min(Math.max(saved.y, 0), maxY),
-    }
-  }
+  if (saved) return clampFloatPos(saved.x, saved.y, area)
+  const { width, height } = display.workArea
   return {
     x: width - FLOAT_SIZE - FLOAT_MARGIN,
     y: height - FLOAT_SIZE - FLOAT_MARGIN,
@@ -175,21 +194,22 @@ function getFloatPosition(): { x: number; y: number } {
 /** 拖动悬浮球（按增量移动，拖动时窗口跟手） */
 function dragFloatBy(dx: number, dy: number): void {
   if (!floatWindow || floatWindow.isDestroyed()) return
-  const b = floatWindow.getBounds()
+  const b = floatPos || floatWindow.getBounds()
+  // 上限按任务栏上沿算：球体正好坐在任务栏顶上，再往下就被任务栏盖住了
   const display = screen.getDisplayNearestPoint({ x: b.x, y: b.y })
-  const wa = display.workArea
-  // 只移动位置，不动尺寸：高 DPI 下 setBounds 改尺寸会把窗口越拖越大
-  const nx = Math.min(Math.max(b.x + dx, wa.x), wa.x + wa.width - FLOAT_SIZE)
-  const ny = Math.min(Math.max(b.y + dy, wa.y), wa.y + wa.height - FLOAT_SIZE)
+  const p = clampFloatPos(b.x + dx, b.y + dy, display.workArea)
+  floatPos = p
   // 尺寸一律显式钉成 FLOAT_SIZE：高 DPI 下 getBounds 的取值范围和 setBounds 的单位不一致，
   // 若把读到的尺寸回填进去，窗口会越拖越大
-  floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+  floatWindow.setBounds({ x: p.x, y: p.y, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
 }
 
 /** 松手后记住悬浮球位置（写独立小文件，不依赖数据库） */
 function saveFloatPosition(): void {
   if (!floatWindow || floatWindow.isDestroyed()) return
-  const b = floatWindow.getBounds()
+  // 高 DPI 下 getBounds() 读回来的值和我们 setBounds 写进去的不是同一套数，
+  // 所以优先用我们记下的那份，避免重启后球的位置往回跳
+  const b = floatPos || floatWindow.getBounds()
   try {
     fs.writeFileSync(
       join(app.getPath('userData'), FLOAT_POS_FILE),
@@ -205,6 +225,8 @@ function saveFloatPosition(): void {
 // screen.getCursorScreenPoint() 与 setBounds 用的是同一套 DIP 坐标，
 // 比在渲染层用 screenX 增量算更准（不会出现"球比鼠标快半拍"）
 let floatDragOrigin: { cx: number; cy: number; wx: number; wy: number } | null = null
+// 我们最后一次亲手写进去的悬浮球位置（不读 getBounds，避开高 DPI 两套数值）
+let floatPos: { x: number; y: number } | null = null
 let floatDragTimer: NodeJS.Timeout | null = null
 
 function dragDbg(line: string): void {
@@ -217,7 +239,7 @@ function dragDbg(line: string): void {
 
 function startFloatDrag(): void {
   if (!floatWindow || floatWindow.isDestroyed() || floatDragTimer) return
-  const b = floatWindow.getBounds()
+  const b = floatPos || floatWindow.getBounds()
   const p = screen.getCursorScreenPoint()
   floatDragOrigin = { cx: p.x, cy: p.y, wx: b.x, wy: b.y }
   let ticks = 0
@@ -229,10 +251,14 @@ function startFloatDrag(): void {
       return
     }
     const cur = screen.getCursorScreenPoint()
-    const wa = screen.getDisplayNearestPoint(cur).workArea
-    const nx = Math.min(Math.max(floatDragOrigin.wx + (cur.x - floatDragOrigin.cx), wa.x), wa.x + wa.width - FLOAT_SIZE)
-    const ny = Math.min(Math.max(floatDragOrigin.wy + (cur.y - floatDragOrigin.cy), wa.y), wa.y + wa.height - FLOAT_SIZE)
-    floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+    const display = screen.getDisplayNearestPoint(cur)
+    const p = clampFloatPos(
+      floatDragOrigin.wx + (cur.x - floatDragOrigin.cx),
+      floatDragOrigin.wy + (cur.y - floatDragOrigin.cy),
+      display.workArea,
+    )
+    floatPos = p
+    floatWindow.setBounds({ x: p.x, y: p.y, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
   }, 16)
 }
 
@@ -254,13 +280,13 @@ function endFloatDrag(): void {
   if (dist < 6) {
     // 单击：复位到按下时的位置再展开
     floatWindow.setBounds({ x: origin.wx, y: origin.wy, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
-    expandFromFloat()
+    expandFromFloat('ball-click')
     return
   }
   const wa = screen.getDisplayNearestPoint(cur).workArea
-  const nx = Math.min(Math.max(origin.wx + (cur.x - origin.cx), wa.x), wa.x + wa.width - FLOAT_SIZE)
-  const ny = Math.min(Math.max(origin.wy + (cur.y - origin.cy), wa.y), wa.y + wa.height - FLOAT_SIZE)
-  floatWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
+  const p = clampFloatPos(origin.wx + (cur.x - origin.cx), origin.wy + (cur.y - origin.cy), wa)
+  floatPos = p
+  floatWindow.setBounds({ x: p.x, y: p.y, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
   saveFloatPosition()
 }
 
@@ -272,10 +298,11 @@ function cancelFloatDrag(): void {
   }
   if (floatWindow && !floatWindow.isDestroyed() && floatDragOrigin) {
     const { wx, wy } = floatDragOrigin
+    floatPos = { x: wx, y: wy }
     floatWindow.setBounds({ x: wx, y: wy, width: FLOAT_SIZE, height: FLOAT_SIZE }, false)
   }
   floatDragOrigin = null
-  expandFromFloat()
+  expandFromFloat('ball-press')
 }
 
 function createWindow(): void {
@@ -378,6 +405,7 @@ function createWindow(): void {
 
 function createFloatWindow(): void {
   const { x, y } = getFloatPosition()
+  floatPos = { x, y }
 
   floatWindow = new BrowserWindow({
     width: FLOAT_SIZE,
@@ -558,7 +586,16 @@ function hideFloat(): void {
 }
 
 /** 由悬浮小球展开主面板 */
-function expandFromFloat(): void {
+function expandFromFloat(from = 'unknown'): void {
+  // 记一笔"是谁把面板打开的"，出问题能查
+  try {
+    fs.appendFileSync(
+      join(app.getPath('userData'), 'expand.log'),
+      `[${new Date().toISOString()}] ${from}\n`,
+    )
+  } catch {
+    /* 忽略 */
+  }
   hideFloat()
   if (!mainWindow || mainWindow.isDestroyed()) return
   const { x, y } = getWindowPosition()
@@ -596,7 +633,7 @@ function toggleWindow(): void {
   if (isPanelShown()) {
     collapseToFloat()
   } else {
-    expandFromFloat()
+    expandFromFloat('toggle')
   }
 }
 
@@ -1322,7 +1359,7 @@ function registerWindowHandlers(): void {
   ipcMain.on('float:save-pos', () => {
     saveFloatPosition()
   })
-  ipcMain.on('window:expand', () => expandFromFloat())
+  ipcMain.on('window:expand', () => expandFromFloat('renderer'))
 
   // 复制完把内容粘回刚才那个窗口（设置里默认关闭）
   ipcMain.handle('clipboard:paste-back', async (_e, type?: string) => {
@@ -1335,7 +1372,7 @@ function registerWindowHandlers(): void {
   ipcMain.on('window:menu', () => {
     if (!floatWindow || floatWindow.isDestroyed()) return
     const menu = Menu.buildFromTemplate([
-      { label: '展开存贴屋', click: expandFromFloat },
+      { label: '展开存贴屋', click: () => expandFromFloat('tray') },
       { label: '设置', click: createSettingsWindow },
       { label: '隐藏悬浮球', click: hideFloat },
       { type: 'separator' },
@@ -1442,7 +1479,7 @@ if (!gotSingleInstanceLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    expandFromFloat()
+    expandFromFloat('second-instance')
   })
 }
 
@@ -1492,7 +1529,7 @@ app.whenReady().then(async () => {
   // 开机自启（带 --autostart）才安静地只留悬浮球，不打扰。
   if (!isAutostart) {
     const openPanelOnStart = () => {
-      if (!isPanelShown()) expandFromFloat()
+      if (!isPanelShown()) expandFromFloat('app-launch')
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.once('did-finish-load', () => setTimeout(openPanelOnStart, 150))
@@ -1508,7 +1545,10 @@ app.whenReady().then(async () => {
 
   setTimeout(() => { blurHideReady = true }, 1500)
 
-  globalShortcut.register('Ctrl+Shift+V', toggleWindow)
+  // 以前是 Ctrl+Shift+V，可这个组合在浏览器、Word、WPS 里是"粘贴为纯文本"，
+  // 用户在别的软件里一按，面板就被我们抢过来弹开了（"自己时不时弹面板"的另一个元凶）。
+  // 换成几乎不冲突的组合。
+  globalShortcut.register('Ctrl+Alt+Shift+V', () => toggleWindow())
 
   // 系统睡眠/锁屏唤醒后：窗口容易失去置顶并被"冻住"，这里把它重新拉回可交互状态
   const recoverAfterWake = () => {
@@ -1543,7 +1583,11 @@ app.on('before-quit', () => {
   if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.destroy()
 })
 
+// 只在 macOS 上走"点 Dock 图标恢复窗口"这条逻辑。
+// Windows 上 activate 会在一些莫名其妙的时候触发（托盘、任务栏、别的窗口抢焦点），
+// 一旦触发就会把已经收起的面板重新亮出来——这就是"时不时自己弹面板"的元凶之一。
 app.on('activate', () => {
+  if (process.platform !== 'darwin') return
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setOpacity(1)
     mainWindow.show()
