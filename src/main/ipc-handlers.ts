@@ -1,4 +1,4 @@
-import { ipcMain, clipboard, BrowserWindow, nativeImage } from 'electron'
+import { ipcMain, clipboard, BrowserWindow, nativeImage, nativeTheme } from 'electron'
 import { getHistory, getItemById, pinItem, archiveItem, getArchived, getArchivedCount, restoreItem, deleteItem, emptyTrash, getSetting, setSetting, getTopSources, ClipboardItem } from './database'
 import { markTextAsHandled, markImageAsHandled } from './clipboard-monitor'
 import { existsSync, unlinkSync, readFileSync, appendFileSync } from 'fs'
@@ -108,6 +108,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:get', (_event, key: string) => {
     return getSetting(key)
+  })
+
+  // 只有文字记录才自动粘贴回上一个窗口；图片一律只复制不抢焦点
+  ipcMain.handle('theme:resolve', () => {
+    const stored = getSetting('theme')
+    if (stored === 'light' || stored === 'dark') return stored
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   })
 
   ipcMain.handle('image:read', (_event, imagePath: string) => {

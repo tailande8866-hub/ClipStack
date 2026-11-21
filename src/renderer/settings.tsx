@@ -184,7 +184,7 @@ function ItemRow({ icon, title, subtitle, right, onClick }: ItemRowProps) {
 function App() {
   const [tab, setTab] = useState<TabKey>('general')
   const [info, setInfo] = useState<SettingsInfo | null>(null)
-  const [days, setDays] = useState('3')
+  const [days, setDays] = useState('24')
   const [pending, setPending] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
@@ -206,7 +206,7 @@ function App() {
   // 复制后自动粘贴
   const [pasteBack, setPasteBack] = useState(false)
   // 外观
-  const [themeLight, setThemeLight] = useState(false)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'auto'>('dark')
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -238,7 +238,7 @@ function App() {
       setPasteBack(v === '1')
     })
     window.electronAPI.getSetting('theme').then((v) => {
-      setThemeLight(v === 'light')
+      setThemeMode(v === 'light' || v === 'auto' ? v : 'dark')
     })
     const off = window.electronAPI.onUpdateAvailable((u) => {
       setCheckResult(u)
@@ -337,12 +337,17 @@ function App() {
     })
   }
 
-  async function toggleTheme() {
-    const next = !themeLight
-    setThemeLight(next)
-    setThemeClass(next ? 'light' : 'dark')
-    await window.electronAPI.setSetting('theme', next ? 'light' : 'dark')
-    setNotice({ type: 'ok', text: next ? '已切换为浅色主题。' : '已切换回深色主题。' })
+  async function chooseTheme(next: 'dark' | 'light' | 'auto') {
+    setThemeMode(next)
+    await window.electronAPI.setSetting('theme', next)
+    if (next === 'auto') {
+      const sys = await window.electronAPI.resolveTheme?.()
+      setThemeClass(sys === 'light' ? 'light' : 'dark')
+      setNotice({ type: 'ok', text: '已跟随系统：Windows 切深浅色时这里会自动变。' })
+      return
+    }
+    setThemeClass(next)
+    setNotice({ type: 'ok', text: next === 'light' ? '已切换为浅色主题。' : '已切换为深色主题。' })
   }
 
   async function toggleSensitiveSkip() {
@@ -643,16 +648,26 @@ function App() {
               <div className="card">
                 <div className="row">
                   <div>
-                    <div className="row-label">浅色主题</div>
+                    <div className="row-label">主题</div>
                     <div className="row-hint">
-                      面板、设置页和悬浮球一起换成浅色玻璃；关掉回到默认的深色。
+                      面板、设置页和悬浮球一起换。跟随系统会按 Windows 的深浅色自动切换。
                     </div>
                   </div>
-                  <button
-                    className={`switch ${themeLight ? 'on' : ''}`}
-                    onClick={toggleTheme}
-                    aria-label="浅色主题"
-                  />
+                  <div className="theme-seg">
+                    {([
+                      ['dark', '深色'],
+                      ['light', '浅色'],
+                      ['auto', '跟随系统'],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={`theme-seg-btn ${themeMode === value ? 'on' : ''}`}
+                        onClick={() => chooseTheme(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

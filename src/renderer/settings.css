@@ -1429,3 +1429,40 @@ select option { background: #131A24; color: var(--text); }
 /* 回收站类型标签 */
 [data-theme='light'] .trash-tag { color: #1B4BC0; background: rgba(37, 99, 235, 0.10); }
 [data-theme='light'] .trash-tag-text { color: #0D7C84; background: rgba(13, 124, 132, 0.10); }
+
+/* 主题分段选择 */
+.theme-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--w-70);
+  border: 1px solid var(--stroke);
+  flex: 0 0 auto;
+}
+
+.theme-seg-btn {
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.theme-seg-btn:hover { color: var(--text-2); }
+
+.theme-seg-btn.on {
+  background: var(--a-200);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 var(--w-180);
+}
+
+[data-theme='light'] .theme-seg { background: rgba(20, 32, 51, 0.05); }
+[data-theme='light'] .theme-seg-btn.on { background: #2563EB; color: #FFFFFF; box-shadow: none; }

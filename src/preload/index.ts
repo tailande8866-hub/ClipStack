@@ -11,7 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyToClipboard: (id: number) =>
     ipcRenderer.invoke('clipboard:copy', id),
 
-  pasteBackToPrevious: () => ipcRenderer.invoke('clipboard:paste-back'),
+  pasteBackToPrevious: (type?: string) => ipcRenderer.invoke('clipboard:paste-back', type),
+
+  resolveTheme: () => ipcRenderer.invoke('theme:resolve'),
 
   diagLog: (msg: string) =>
     ipcRenderer.invoke('diag:log', msg),

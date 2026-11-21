@@ -18,7 +18,8 @@ export interface ElectronAPI {
   getTopSources: () => Promise<{ app: string; count: number }[]>
   startDrag: (filePath: string) => void
   copyToClipboard: (id: number) => Promise<boolean>
-  pasteBackToPrevious: () => Promise<boolean>
+  pasteBackToPrevious: (type?: 'text' | 'image' | string) => Promise<boolean>
+  resolveTheme?: () => Promise<'dark' | 'light'>
   pinItem: (id: number, pinned: boolean) => Promise<void>
   deleteItem: (id: number) => Promise<void>
   getTrash: (search?: string) => Promise<ClipboardItem[]>

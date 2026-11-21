@@ -13,6 +13,7 @@ import {
   shell,
   clipboard,
   powerMonitor,
+  nativeTheme,
 } from 'electron'
 import { isAbsolute, join, resolve, dirname, basename } from 'path'
 import fs from 'fs'
@@ -63,6 +64,11 @@ let lastForegroundHwnd = ''
 
 const MAIN_W = 320
 const MAIN_H = 440
+// 面板实际尺寸（用户拖过边缘就沿用上次的）
+let panelW = MAIN_W
+let panelH = MAIN_H
+const PANEL_MIN_W = 300
+const PANEL_MIN_H = 420
 const FLOAT_SIZE = 128  // 窗口留出光圈渐隐空间，球体本体 46px
 const FLOAT_MARGIN = 8
 const EDGE_MARGIN = 16
@@ -122,8 +128,8 @@ function getWindowPosition(): { x: number; y: number } {
   const display = screen.getPrimaryDisplay()
   const { width, height } = display.workArea
   return {
-    x: width - MAIN_W - EDGE_MARGIN,
-    y: height - MAIN_H - EDGE_MARGIN,
+    x: width - panelW - EDGE_MARGIN,
+    y: height - panelH - EDGE_MARGIN,
   }
 }
 
@@ -270,9 +276,20 @@ function cancelFloatDrag(): void {
 function createWindow(): void {
   const { x, y } = getWindowPosition()
 
+  // 上次调整过的面板尺寸
+  const saved = getSetting('panel_size')
+  const m = saved ? /^(\d{3,4})\s*[x×*]\s*(\d{3,4})$/.exec(saved) : null
+  if (m) {
+    panelW = Math.max(PANEL_MIN_W, parseInt(m[1], 10))
+    panelH = Math.max(PANEL_MIN_H, parseInt(m[2], 10))
+    const area = screen.getPrimaryDisplay().workArea
+    panelW = Math.min(panelW, area.width - 40)
+    panelH = Math.min(panelH, area.height - 40)
+  }
+
   mainWindow = new BrowserWindow({
-    width: MAIN_W,
-    height: MAIN_H,
+    width: panelW,
+    height: panelH,
     x,
     y,
     frame: false,
@@ -281,7 +298,9 @@ function createWindow(): void {
     backgroundColor: '#00000000',
     hasShadow: false,
     roundedCorners: false,
-    resizable: false,
+    resizable: true,
+    minWidth: PANEL_MIN_W,
+    minHeight: PANEL_MIN_H,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
@@ -290,6 +309,20 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  // 拖边缘改过大小就记下来（防抖，别每移动一像素写一次库）
+  let sizeTimer: ReturnType<typeof setTimeout> | null = null
+  mainWindow.on('resize', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (sizeTimer) clearTimeout(sizeTimer)
+    sizeTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      const b = mainWindow.getBounds()
+      panelW = b.width
+      panelH = b.height
+      setSetting('panel_size', `${b.width}x${b.height}`)
+    }, 400)
   })
 
   setMainWindow(mainWindow)
@@ -1191,7 +1224,8 @@ function registerWindowHandlers(): void {
   ipcMain.on('window:expand', () => expandFromFloat())
 
   // 复制完把内容粘回刚才那个窗口（设置里默认关闭）
-  ipcMain.handle('clipboard:paste-back', async () => {
+  ipcMain.handle('clipboard:paste-back', async (_e, type?: string) => {
+    if (type && type !== 'text') return false
     if (getSetting('paste_after_copy') !== '1') return false
     if (!lastForegroundHwnd) return false
     return pasteBackToWindow(lastForegroundHwnd)
@@ -1320,6 +1354,16 @@ app.whenReady().then(async () => {
     const schtasks = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe')
     execFileSync(schtasks, ['/delete', '/f', '/tn', UPDATE_TASK_NAME], { windowsHide: true })
   } catch { /* 没有残留任务就算了 */ }
+  // 跟随系统主题：Windows 切换深浅色时自动通知三个窗口
+  try {
+    nativeTheme.on('updated', () => {
+      if (getSetting('theme') !== 'auto') return
+      const next = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('theme:changed', next)
+      }
+    })
+  } catch { /* 忽略 */ }
   registerIpcHandlers()
   registerWindowHandlers()
   onNewItem(notifyNewItem)
