@@ -318,10 +318,13 @@ function createWindow(): void {
     if (sizeTimer) clearTimeout(sizeTimer)
     sizeTimer = setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return
-      const b = mainWindow.getBounds()
-      panelW = b.width
-      panelH = b.height
-      setSetting('panel_size', `${b.width}x${b.height}`)
+      // 用内容区尺寸（DIP），别用 getBounds()：
+      // 窗口在 DPI 缩放变化时会收到一次 resize，getBounds 返回的是缩放后的物理值，
+      // 存进去之后面板会一次比一次宽（334 → 467 → …），列数也跟着乱变。
+      const [w, h] = mainWindow.getContentSize()
+      panelW = w
+      panelH = h
+      setSetting('panel_size', `${w}x${h}`)
     }, 400)
   })
 
@@ -455,8 +458,9 @@ function createSettingsWindow(): void {
     if (settingsSizeTimer) clearTimeout(settingsSizeTimer)
     settingsSizeTimer = setTimeout(() => {
       if (!settingsWindow || settingsWindow.isDestroyed()) return
-      const b = settingsWindow.getBounds()
-      setSetting('settings_size', `${b.width}x${b.height}`)
+      // 同上：存内容区尺寸，避免 DPI 缩放把尺寸越记越大
+      const [w, h] = settingsWindow.getContentSize()
+      setSetting('settings_size', `${w}x${h}`)
     }, 400)
   })
 

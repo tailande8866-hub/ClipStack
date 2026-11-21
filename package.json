@@ -1,7 +1,7 @@
 {
   "name": "floatpaste",
   "productName": "存贴屋",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "存贴屋 CunTieWu —— 你的复制截图历史仓库。",
   "main": "./out/main/index.mjs",
   "scripts": {
