@@ -7,7 +7,7 @@ const root = document.getElementById('root')!
 
 const ball = document.createElement('button')
 ball.className = 'float-ball'
-ball.title = '点击展开剪贴栈（右键更多操作）'
+ball.title = '点击展开存贴屋（右键更多操作）'
 ball.innerHTML = `
   <span class="aura" aria-hidden="true"></span>
   <span class="halo" aria-hidden="true"></span>

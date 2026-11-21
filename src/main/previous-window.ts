@@ -7,7 +7,7 @@ const PS =
   'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
 
 /** 我们自己进程的可执行名，捕获到这些就丢弃（说明面板已经抢到前台了） */
-const SELF_NAMES = ['剪贴栈', 'ClipStack', 'electron', 'floatpaste']
+const SELF_NAMES = ['存贴屋', 'ClipStack', 'electron', 'floatpaste']
 
 const WARM_SCRIPT = `
 $ErrorActionPreference = 'SilentlyContinue'

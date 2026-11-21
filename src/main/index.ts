@@ -426,7 +426,7 @@ function createSettingsWindow(): void {
     maximizable: false,
     skipTaskbar: false,
     show: false,
-    title: '设置 · 剪贴栈',
+    title: '设置 · 存贴屋',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -566,7 +566,7 @@ function createTray(): void {
     { type: 'separator' },
     { label: '退出', click: () => { isQuitting = true; app.quit() } },
   ])
-  tray.setToolTip('剪贴栈 · 你的复制截图历史仓库')
+  tray.setToolTip('存贴屋 · 你的复制截图历史仓库')
   tray.setContextMenu(menu)
   tray.on('click', toggleWindow)
 }
@@ -1010,7 +1010,7 @@ async function exportBackup(): Promise<{ ok: boolean; canceled?: boolean; path?:
   const win = settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null
   const stamp = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  const name = `剪贴栈备份-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.zip`
+  const name = `存贴屋备份-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.zip`
   const options: Electron.SaveDialogOptions = {
     title: '导出备份',
     defaultPath: join(app.getPath('documents'), name),
@@ -1060,7 +1060,7 @@ async function restoreBackup(): Promise<{ ok: boolean; canceled?: boolean; messa
       const sub = fs.readdirSync(tmp, { withFileTypes: true }).find((d) => d.isDirectory())
       if (sub) dbFile = join(tmp, sub.name, 'data.db')
     }
-    if (!fs.existsSync(dbFile)) return { ok: false, message: '这个压缩包里没有 data.db，不像是剪贴栈的备份。' }
+    if (!fs.existsSync(dbFile)) return { ok: false, message: '这个压缩包里没有 data.db，不像是存贴屋的备份。' }
 
     const root = dirname(dbFile)
     const dataDir = getDataDir()
@@ -1234,7 +1234,7 @@ function registerWindowHandlers(): void {
   ipcMain.on('window:menu', () => {
     if (!floatWindow || floatWindow.isDestroyed()) return
     const menu = Menu.buildFromTemplate([
-      { label: '展开剪贴栈', click: expandFromFloat },
+      { label: '展开存贴屋', click: expandFromFloat },
       { label: '设置', click: createSettingsWindow },
       { label: '隐藏悬浮球', click: hideFloat },
       { type: 'separator' },

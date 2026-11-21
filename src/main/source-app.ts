@@ -50,7 +50,7 @@ const FRIENDLY: Record<string, string> = {
   winword: 'Word',
   excel: 'Excel',
   powerpnt: 'PPT',
-  ttime: '剪贴栈',
+  ttime: '存贴屋',
 }
 
 export function getForegroundApp(): Promise<string | null> {
@@ -64,7 +64,7 @@ export function getForegroundApp(): Promise<string | null> {
         const raw = String(stdout || '').trim()
         if (!raw) return resolve(null)
         const name = raw.toLowerCase()
-        if (name.startsWith('clipstack') || name.includes('悬浮') || name === 'ttime' || name === '剪贴栈') {
+        if (name.startsWith('clipstack') || name.includes('悬浮') || name === 'ttime' || name === '存贴屋') {
           return resolve(null)
         }
         resolve(FRIENDLY[name] || raw.slice(0, 20))

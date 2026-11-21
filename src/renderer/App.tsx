@@ -263,7 +263,7 @@ export default function App() {
             </svg>
           </span>
           <div className="brand-text">
-            <h1>剪贴栈</h1>
+            <h1>存贴屋</h1>
             <span className="brand-sub">复制截图历史仓库</span>
           </div>
         </div>

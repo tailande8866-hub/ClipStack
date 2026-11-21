@@ -331,7 +331,7 @@ function App() {
       type: 'ok',
       text: next
         ? '已开启：点卡片复制后会自动切回刚才的窗口并粘贴。'
-        : '已关闭：复制后仍留在剪贴栈面板，需要自己切窗口粘贴。',
+        : '已关闭：复制后仍留在存贴屋面板，需要自己切窗口粘贴。',
     })
   }
 
@@ -558,7 +558,7 @@ function App() {
               <line x1="10.8" y1="11.4" x2="14.6" y2="11.4" stroke="#2A4777" strokeWidth="1.4" />
             </svg>
           </span>
-          <span>设置 · 剪贴栈</span>
+          <span>设置 · 存贴屋</span>
         </div>
         <div className="win-btns">
           <button className="win-btn" title="最小化" onClick={() => window.electronAPI.minimizeSettings()}>
@@ -908,10 +908,10 @@ function App() {
                 <div className="hero-gloss" aria-hidden="true" />
                 <div className="hero-inner">
                   <div className="about-logo">
-                    <img src={appIcon} alt="剪贴栈" />
+                    <img src={appIcon} alt="存贴屋" />
                   </div>
                   <div className="hero-text">
-                    <div className="about-name">剪贴栈</div>
+                    <div className="about-name">存贴屋</div>
                     <div className="about-sub">你的复制截图历史仓库</div>
                     <div className="about-ver">ClipStack · v{info?.version || '1.1.0'} · Windows</div>
                   </div>

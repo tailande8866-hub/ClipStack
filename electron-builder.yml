@@ -1,6 +1,6 @@
 appId: com.floatpaste.app
-productName: "剪贴栈"
-copyright: Copyright 2026 剪贴栈
+productName: "存贴屋"
+copyright: Copyright 2026 存贴屋
 
 directories:
   output: dist
@@ -24,15 +24,15 @@ win:
     - target: nsis
       arch: [x64]
   icon: icon.ico
-  executableName: 剪贴栈
-  artifactName: "ClipStack-${version}-${arch}.${ext}"
+  executableName: 存贴屋
+  artifactName: "CunTieWu-${version}-${arch}.${ext}"
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: "剪贴栈"
-  uninstallDisplayName: "剪贴栈"
+  shortcutName: "存贴屋"
+  uninstallDisplayName: "存贴屋"
   installerIcon: icon.ico
   uninstallerIcon: icon.ico

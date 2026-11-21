@@ -1,8 +1,8 @@
 {
   "name": "floatpaste",
-  "productName": "剪贴栈",
+  "productName": "存贴屋",
   "version": "1.4.3",
-  "description": "剪贴栈 ClipStack —— 你的复制截图历史仓库。",
+  "description": "存贴屋 CunTieWu —— 你的复制截图历史仓库。",
   "main": "./out/main/index.mjs",
   "scripts": {
     "dev": "cross-env ELECTRON_RUN_AS_NODE=\"\" electron-vite dev",
