@@ -1,8 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  getHistory: (search?: string, limit?: number, offset?: number) =>
-    ipcRenderer.invoke('history:get', search, limit, offset),
+  getHistory: (search?: string, limit?: number, offset?: number, filter?: string) =>
+    ipcRenderer.invoke('history:get', search, limit, offset, filter),
+
+  getTopSources: () => ipcRenderer.invoke('history:sources'),
+
+  startDrag: (filePath: string) => ipcRenderer.send('drag:start', filePath),
 
   copyToClipboard: (id: number) =>
     ipcRenderer.invoke('clipboard:copy', id),
@@ -15,6 +19,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   deleteItem: (id: number) =>
     ipcRenderer.invoke('history:delete', id),
+
+  getTrash: (search?: string) => ipcRenderer.invoke('trash:list', search),
+  getTrashCount: () => ipcRenderer.invoke('trash:count'),
+  restoreItem: (id: number) => ipcRenderer.invoke('trash:restore', id),
+  purgeItem: (id: number) => ipcRenderer.invoke('trash:purge', id),
+  emptyTrash: () => ipcRenderer.invoke('trash:empty'),
 
   readImageData: (imagePath: string) =>
     ipcRenderer.invoke('image:read', imagePath),
@@ -80,6 +90,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   copyText: (text: string) => ipcRenderer.invoke('settings:copy-text', text),
 
   exportDiagnostics: () => ipcRenderer.invoke('settings:export-diagnostics'),
+
+  exportBackup: () => ipcRenderer.invoke('backup:export'),
+
+  restoreBackup: () => ipcRenderer.invoke('backup:restore'),
 
   getDiagnosticsText: () => ipcRenderer.invoke('settings:diagnostics-text'),
 

@@ -997,3 +997,71 @@ select option { background: #131A24; color: var(--text); }
   background: rgba(127, 182, 255, 0.20);
   border-color: rgba(140, 190, 255, 0.5);
 }
+
+/* 回收站列表 */
+.trash-list {
+  margin-top: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trash-empty {
+  font-size: 11px;
+  color: var(--text-3, #9FAEC4);
+  padding: 10px 2px;
+}
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(140, 190, 255, 0.14);
+}
+.trash-tag {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: #A9D4FF;
+  background: rgba(127, 182, 255, 0.16);
+  border: 1px solid rgba(127, 182, 255, 0.28);
+}
+.trash-tag-text {
+  color: #8FE6DD;
+  background: rgba(143, 230, 221, 0.14);
+  border-color: rgba(143, 230, 221, 0.26);
+}
+.trash-main { flex: 1 1 auto; min-width: 0; }
+.trash-text {
+  font-size: 12px;
+  color: var(--text, #F7FAFF);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trash-meta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-3, #9FAEC4);
+}
+
+/* 屏蔽词输入框 */
+.sensitive-input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text, #F7FAFF);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(140, 190, 255, 0.2);
+  outline: none;
+}
+.sensitive-input:focus { border-color: rgba(140, 190, 255, 0.5); }
+.sensitive-input::placeholder { color: var(--text-3, #9FAEC4); }

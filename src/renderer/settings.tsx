@@ -4,7 +4,8 @@ import { createRoot } from 'react-dom/client'
 import './settings.css'
 import appIcon from './assets/app-icon.png'
 import heroArt from './assets/hero-aurora.jpg'
-import type { SettingsInfo, UpdateProgress } from './types/clipboard'
+import type { SettingsInfo, UpdateProgress, ClipboardItem } from './types/clipboard'
+import { formatTime } from './utils/time'
 
 type TabKey = 'general' | 'storage' | 'feedback' | 'about'
 
@@ -191,6 +192,16 @@ function App() {
   const [checkResult, setCheckResult] = useState<SettingsInfo['updateCheck']>(null)
   const [autoUpdate, setAutoUpdate] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+  // 回收站
+  const [trashItems, setTrashItems] = useState<ClipboardItem[]>([])
+  const [trashCount, setTrashCount] = useState(0)
+  const [trashBusy, setTrashBusy] = useState(false)
+  const [emptyConfirm, setEmptyConfirm] = useState(false)
+  const [trashKeep, setTrashKeep] = useState('30')
+  // 隐私
+  const [sensitiveSkip, setSensitiveSkip] = useState(true)
+  const [sensitiveExtra, setSensitiveExtra] = useState('')
   const [installing, setInstalling] = useState(false)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -211,6 +222,13 @@ function App() {
     window.electronAPI.getUpdateStatus().then((s) => {
       if (s) setCheckResult(s)
     })
+    loadTrash()
+    window.electronAPI.getSetting('sensitive_skip').then((v) => {
+      if (v !== null) setSensitiveSkip(v !== '0')
+    })
+    window.electronAPI.getSetting('sensitive_extra').then((v) => {
+      if (v) setSensitiveExtra(v)
+    })
     const off = window.electronAPI.onUpdateAvailable((u) => {
       setCheckResult(u)
       if (u && u.hasUpdate) {
@@ -230,6 +248,85 @@ function App() {
   function switchTab(k: TabKey) {
     setTab(k)
     setNotice(null)
+    if (k === 'storage') loadTrash()
+  }
+
+  async function loadTrash() {
+    try {
+      const [list, count, keep] = await Promise.all([
+        window.electronAPI.getTrash(''),
+        window.electronAPI.getTrashCount(),
+        window.electronAPI.getSetting('trash_keep_days'),
+      ])
+      setTrashItems(list)
+      setTrashCount(count)
+      if (keep) setTrashKeep(keep)
+    } catch {
+      /* 读取失败不影响其它设置 */
+    }
+  }
+
+  async function restoreOne(id: number) {
+    setTrashBusy(true)
+    try {
+      await window.electronAPI.restoreItem(id)
+      setNotice({ type: 'ok', text: '已恢复到列表最上面。' })
+    } catch {
+      setNotice({ type: 'err', text: '恢复失败。' })
+    }
+    await loadTrash()
+    setTrashBusy(false)
+  }
+
+  async function purgeOne(id: number) {
+    setTrashBusy(true)
+    try {
+      await window.electronAPI.purgeItem(id)
+      setNotice({ type: 'ok', text: '已彻底删除。' })
+    } catch {
+      setNotice({ type: 'err', text: '删除失败。' })
+    }
+    await loadTrash()
+    setTrashBusy(false)
+  }
+
+  async function emptyAll() {
+    if (!emptyConfirm) {
+      setEmptyConfirm(true)
+      setNotice({ type: 'warn', text: '再点一次「清空回收站」才会真的删掉，删除后不可恢复。' })
+      return
+    }
+    setEmptyConfirm(false)
+    setTrashBusy(true)
+    try {
+      const n = await window.electronAPI.emptyTrash()
+      setNotice({ type: 'ok', text: `已清空回收站，共删掉 ${n} 项。` })
+    } catch {
+      setNotice({ type: 'err', text: '清空失败。' })
+    }
+    await loadTrash()
+    setTrashBusy(false)
+  }
+
+  async function changeTrashKeep(v: string) {
+    setTrashKeep(v)
+    await window.electronAPI.setSetting('trash_keep_days', v)
+    setNotice({ type: 'ok', text: `回收站保留 ${v} 天，超期自动彻底清空。` })
+  }
+
+  async function toggleSensitiveSkip() {
+    const next = !sensitiveSkip
+    setSensitiveSkip(next)
+    await window.electronAPI.setSetting('sensitive_skip', next ? '1' : '0')
+    setNotice({
+      type: 'ok',
+      text: next ? '已开启：像密码/密钥/卡号的文本不再进历史。' : '已关闭：所有复制的文本都会记录（含密码类内容）。',
+    })
+  }
+
+  async function saveSensitiveExtra() {
+    await window.electronAPI.setSetting('sensitive_extra', sensitiveExtra.trim())
+    setNotice({ type: 'ok', text: '屏蔽词已保存，之后复制的内容会按新规则过滤。' })
   }
 
   async function changeRetention(v: string) {
@@ -240,7 +337,7 @@ function App() {
       type: 'ok',
       text: label === '永久'
         ? '已设为永久保留，记录不会被自动清理。'
-        : `保留时长已设为 ${label}，超期记录会自动清理。`,
+        : `已设为 ${label}，从现在开始计时：之后复制的内容满 ${label} 自动移进回收站（图片文件不会删，随时能恢复）。`,
     })
   }
 
@@ -317,6 +414,28 @@ function App() {
       setNotice({ type: 'ok', text: '诊断信息已导出：' + r.path })
     } else if (!r.canceled) {
       setNotice({ type: 'err', text: '导出失败：' + (r.message || '未知错误') })
+    }
+  }
+
+  async function doExportBackup() {
+    setBackupBusy(true)
+    try {
+      const r = await window.electronAPI.exportBackup()
+      if (r?.ok) setNotice({ type: 'ok', text: '备份已导出：' + r.path })
+      else if (!r?.canceled) setNotice({ type: 'err', text: '导出失败：' + (r?.message || '未知错误') })
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function doRestoreBackup() {
+    setBackupBusy(true)
+    try {
+      const r = await window.electronAPI.restoreBackup()
+      if (r?.ok) setNotice({ type: 'ok', text: '备份已恢复，正在重启…' })
+      else if (!r?.canceled) setNotice({ type: 'err', text: '恢复失败：' + (r?.message || '未知错误') })
+    } finally {
+      setBackupBusy(false)
     }
   }
 
@@ -474,6 +593,38 @@ function App() {
               </div>
 
               {notice && <div className={`notice notice-${notice.type}`}>{notice.text}</div>}
+
+              <div className="section-label">隐私</div>
+              <div className="card">
+                <div className="row">
+                  <div>
+                    <div className="row-label">跳过敏感内容</div>
+                    <div className="row-hint">
+                      密码管理器标了「不记录」的内容、看起来像密码/密钥/卡号的长串，直接不进历史。
+                    </div>
+                  </div>
+                  <button
+                    className={`switch ${sensitiveSkip ? 'on' : ''}`}
+                    onClick={toggleSensitiveSkip}
+                    aria-label="跳过敏感内容"
+                  />
+                </div>
+
+                <div className="row" style={{ alignItems: 'flex-start' }}>
+                  <div style={{ flex: '1 1 auto' }}>
+                    <div className="row-label">额外屏蔽词</div>
+                    <div className="row-hint">每行一个，复制的内容里带这些词就不入库（比如自己公司名、客户名）。</div>
+                    <textarea
+                      className="sensitive-input"
+                      value={sensitiveExtra}
+                      onChange={(e) => setSensitiveExtra(e.target.value)}
+                      onBlur={saveSensitiveExtra}
+                      placeholder={'一行一个词，留空表示不额外屏蔽'}
+                      rows={4}
+                    />
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
@@ -536,6 +687,65 @@ function App() {
               )}
 
               {notice && <div className={`notice notice-${notice.type}`}>{notice.text}</div>}
+
+              <div className="section-label">回收站</div>
+              <div className="card">
+                <div className="row">
+                  <div>
+                    <div className="row-label">回收站里 {trashCount} 条</div>
+                    <div className="row-hint">
+                      到期和手动删除的记录先放这里，图片文件都还留着；超过保留天数才彻底清空。
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="badge badge-default">保留 {trashKeep} 天</span>
+                    <select
+                      className="retention-select"
+                      value={trashKeep}
+                      onChange={(e) => changeTrashKeep(e.target.value)}
+                      disabled={trashBusy}
+                    >
+                      <option value="3">3 天</option>
+                      <option value="7">7 天</option>
+                      <option value="30">30 天</option>
+                      <option value="90">90 天</option>
+                    </select>
+                    <button className="btn" onClick={loadTrash} disabled={trashBusy}>刷新</button>
+                    <button
+                      className="btn"
+                      onClick={emptyAll}
+                      disabled={trashBusy || trashCount === 0}
+                      style={emptyConfirm ? { borderColor: '#E08A8A', color: '#FFB4B4' } : undefined}
+                    >
+                      {emptyConfirm ? '确认清空？' : '清空回收站'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="trash-list">
+                  {trashItems.length === 0 && <div className="trash-empty">回收站是空的</div>}
+                  {trashItems.map((it) => (
+                    <div className="trash-row" key={it.id}>
+                      {it.type === 'image' ? (
+                        <span className="trash-tag">图片</span>
+                      ) : (
+                        <span className="trash-tag trash-tag-text">文字</span>
+                      )}
+                      <div className="trash-main">
+                        <div className="trash-text">
+                          {it.type === 'image' ? (it.ocr_text || '（截图，识别不到文字）') : (it.content || '')}
+                        </div>
+                        <div className="trash-meta">
+                          {formatTime(it.archived_at || it.created_at)} 移入
+                          {it.source_app ? ` · 来自 ${it.source_app}` : ''}
+                        </div>
+                      </div>
+                      <button className="btn" onClick={() => restoreOne(it.id)} disabled={trashBusy}>恢复</button>
+                      <button className="btn" onClick={() => purgeOne(it.id)} disabled={trashBusy}>彻底删除</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -566,6 +776,30 @@ function App() {
                   subtitle={`QQ：${info?.qqGroup || '913838378'} · 点击复制号码`}
                   right={<span className="mini-icon">{<IconChev />}</span>}
                   onClick={copyQQ}
+                />
+              </div>
+
+              <div className="section-label">数据备份</div>
+              <div className="card card-list">
+                <ItemRow
+                  icon={<IconDoc />}
+                  title="导出备份"
+                  subtitle="把数据库和所有图片打成一个 zip，换电脑/重装前先存一份"
+                  right={
+                    <button className="btn" onClick={doExportBackup} disabled={backupBusy}>
+                      {backupBusy ? '处理中…' : '导出…'}
+                    </button>
+                  }
+                />
+                <ItemRow
+                  icon={<IconDoc />}
+                  title="从备份恢复"
+                  subtitle="选一个备份 zip 覆盖当前数据，旧数据会自动留在旁边一份"
+                  right={
+                    <button className="btn" onClick={doRestoreBackup} disabled={backupBusy}>
+                      {backupBusy ? '处理中…' : '选择文件…'}
+                    </button>
+                  }
                 />
               </div>
 

@@ -8,6 +8,7 @@ import { showToast } from '../toast'
 interface Props {
   item: ClipboardItem
   onChanged: () => void
+  focused?: boolean
 }
 
 type Feedback = null | 'copied' | 'pinned' | 'unpinned'
@@ -18,7 +19,7 @@ const BADGE_TEXT: Record<Exclude<Feedback, null>, string> = {
   unpinned: '已取消置顶',
 }
 
-export default function ClipboardCard({ item, onChanged }: Props) {
+export default function ClipboardCard({ item, onChanged, focused = false }: Props) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [feedback, setFeedback] = useState<Feedback>(null)
   const [deleting, setDeleting] = useState(false)
@@ -109,7 +110,7 @@ export default function ClipboardCard({ item, onChanged }: Props) {
   return (
     <div
       ref={cardRef}
-      className={`clipboard-card${deleting ? ' deleting' : ''}`}
+      className={`clipboard-card${deleting ? ' deleting' : ''}${focused ? ' card-focused' : ''}`}
       data-item-id={item.id}
       data-item-type={item.type}
       data-item-pin={item.is_pinned ? '1' : '0'}

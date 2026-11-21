@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react'
 
 interface Props {
-  onSearch: (query: string) => void
+  value: string
+  onChange: (query: string) => void
 }
 
-export default function SearchBar({ onSearch }: Props) {
-  const [value, setValue] = useState('')
+export default function SearchBar({ value, onChange }: Props) {
+  const [local, setLocal] = useState(value)
+
+  // 外部清空（比如按 Esc）时同步回输入框
+  useEffect(() => {
+    setLocal(value)
+  }, [value])
 
   useEffect(() => {
-    const timer = setTimeout(() => onSearch(value), 300)
+    const timer = setTimeout(() => onChange(local), 300)
     return () => clearTimeout(timer)
-  }, [value, onSearch])
+  }, [local, onChange])
 
   return (
     <div className="search-bar">
@@ -21,12 +27,19 @@ export default function SearchBar({ onSearch }: Props) {
       <input
         className="search-input"
         type="text"
-        placeholder="搜索复制过的内容"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+        placeholder="搜索复制过的内容（含截图里的字）"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
       />
-      {value && (
-        <button className="search-clear" title="清空" onClick={() => setValue('')}>
+      {local && (
+        <button
+          className="search-clear"
+          title="清空"
+          onClick={() => {
+            setLocal('')
+            onChange('')
+          }}
+        >
           &times;
         </button>
       )}

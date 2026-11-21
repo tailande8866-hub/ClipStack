@@ -1,5 +1,5 @@
 import { ipcMain, clipboard, BrowserWindow, nativeImage } from 'electron'
-import { getHistory, getItemById, pinItem, deleteItem, getSetting, setSetting, cleanupExpired, ClipboardItem } from './database'
+import { getHistory, getItemById, pinItem, archiveItem, getArchived, getArchivedCount, restoreItem, deleteItem, emptyTrash, getSetting, setSetting, getTopSources, ClipboardItem } from './database'
 import { markTextAsHandled, markImageAsHandled } from './clipboard-monitor'
 import { existsSync, unlinkSync, readFileSync, appendFileSync } from 'fs'
 import { createHash } from 'crypto'
@@ -21,10 +21,19 @@ export function setMainWindow(win: BrowserWindow | null): void {
   mainWindow = win
 }
 
+// 主窗口列表要跟着刷新（比如在设置页把记录从回收站恢复回来）
+function notifyChanged(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('data:changed')
+  }
+}
+
 export function registerIpcHandlers(): void {
-  ipcMain.handle('history:get', (_event, search?: string, limit?: number, offset?: number) => {
-    return getHistory(search, limit, offset)
+  ipcMain.handle('history:get', (_event, search?: string, limit?: number, offset?: number, filter?: string) => {
+    return getHistory(search, limit, offset, (filter || '') as any)
   })
+
+  ipcMain.handle('history:sources', () => getTopSources(4))
 
   ipcMain.handle('diag:log', (_event, msg: string) => {
     diag('renderer: ' + msg)
@@ -58,11 +67,43 @@ export function registerIpcHandlers(): void {
     pinItem(id, pinned)
   })
 
+  // 删除 = 进回收站（记录和图片文件都保留，能恢复）
   ipcMain.handle('history:delete', (_event, id: number) => {
+    archiveItem(id)
+  })
+
+  ipcMain.handle('trash:list', (_event, search?: string) => getArchived(200, search))
+  ipcMain.handle('trash:count', () => getArchivedCount())
+
+  ipcMain.handle('trash:restore', (_event, id: number) => {
+    restoreItem(id)
+    notifyChanged()
+  })
+
+  // 彻底删除单条：这时才删图片文件
+  ipcMain.handle('trash:purge', (_event, id: number) => {
     const item = deleteItem(id)
-    if (item && item.image_path && existsSync(item.image_path)) {
-      unlinkSync(item.image_path)
+    if (item?.image_path && existsSync(item.image_path)) {
+      try {
+        unlinkSync(item.image_path)
+      } catch {
+        /* 文件占用，忽略 */
+      }
     }
+    notifyChanged()
+  })
+
+  ipcMain.handle('trash:empty', () => {
+    const paths = emptyTrash()
+    for (const p of paths) {
+      try {
+        if (existsSync(p)) unlinkSync(p)
+      } catch {
+        /* 忽略 */
+      }
+    }
+    notifyChanged()
+    return paths.length
   })
 
   ipcMain.handle('settings:get', (_event, key: string) => {
@@ -72,18 +113,19 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('image:read', (_event, imagePath: string) => {
     if (!existsSync(imagePath)) return null
     const buf = readFileSync(imagePath)
-    return 'data:image/png;base64,' + buf.toString('base64')
+    const mime = /\.jpe?g$/i.test(imagePath) ? 'image/jpeg' : 'image/png'
+    return `data:${mime};base64,` + buf.toString('base64')
   })
 
   ipcMain.handle('settings:set', (_event, key: string, value: string) => {
     setSetting(key, value)
     if (key === 'retention_hours') {
       const hours = parseInt(value, 10)
+      // 重新计时：从改设置的这一刻开始算，满这么久之后才开始清（老记录也一样）
       if (Number.isFinite(hours) && hours > 0) {
-        const paths = cleanupExpired(hours)
-        for (const p of paths) {
-          if (existsSync(p)) unlinkSync(p)
-        }
+        setSetting('retention_started_at', String(Date.now()))
+      } else {
+        setSetting('retention_started_at', '0')
       }
     }
   })

@@ -5,7 +5,16 @@ import SearchBar from './components/SearchBar'
 import RetentionSelector from './components/RetentionSelector'
 import ClipboardList from './components/ClipboardList'
 import EmptyState from './components/EmptyState'
+import type { HistoryFilter } from './types/clipboard'
 import { subscribeToast } from './toast'
+
+const FILTERS: { key: HistoryFilter; label: string }[] = [
+  { key: '', label: '全部' },
+  { key: 'image', label: '图片' },
+  { key: 'text', label: '文字' },
+  { key: 'link', label: '链接' },
+  { key: 'pinned', label: '置顶' },
+]
 
 const IconGear = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
@@ -15,12 +24,131 @@ const IconGear = () => (
 )
 
 export default function App() {
+  const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
-  const { items, refresh } = useClipboardHistory(search)
+  const [filter, setFilter] = useState<HistoryFilter>('')
+  const { items, refresh } = useClipboardHistory(search, filter)
+  const [focusIndex, setFocusIndex] = useState(-1)
+  const [sources, setSources] = useState<{ app: string; count: number }[]>([])
+
+  // 来源筛选：最近从哪几个程序复制的（动态 chip，按条数排）
+  useEffect(() => {
+    let alive = true
+    const load = () => {
+      window.electronAPI
+        .getTopSources()
+        .then((list) => { if (alive) setSources(list || []) })
+        .catch(() => { /* 忽略 */ })
+    }
+    load()
+    const off = window.electronAPI.onDataChanged(load)
+    return () => { alive = false; off() }
+  }, [])
   const probeRef = useRef<HTMLButtonElement>(null)
   const aliveRef = useRef(false)
   const [toastMsg, setToastMsg] = useState('')
   const toastTimer = useRef(0)
+  const listRef = useRef<HTMLDivElement>(null)
+  const [showToTop, setShowToTop] = useState(false)
+  // 视图：单列 / 网格（网格一屏能看十几张图）
+  const [layout, setLayout] = useState<'list' | 'grid'>(() =>
+    localStorage.getItem('clipstack-layout') === 'grid' ? 'grid' : 'list',
+  )
+  const toggleLayout = useCallback(() => {    setLayout((prev) => {
+      const next = prev === 'grid' ? 'list' : 'grid'
+      localStorage.setItem('clipstack-layout', next)
+      const el = listRef.current
+      if (el) el.scrollTop = 0
+      return next
+    })
+  }, [])
+
+  // 搜索防抖：输入停 300ms 再查
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearch(query), 300)
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  // 键盘操作：↑↓ 选卡片、Enter 复制、Esc 先把搜索清空、再按收起
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ctrl+F：直接把光标送进搜索框，随手就能筛
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        const input = document.querySelector<HTMLInputElement>('.search-input')
+        if (input) {
+          e.preventDefault()
+          input.focus()
+          input.select()
+        }
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (items.length === 0) return
+        e.preventDefault()
+        setFocusIndex((prev) => {
+          if (e.key === 'ArrowDown') return prev < 0 ? 0 : Math.min(items.length - 1, prev + 1)
+          return prev < 0 ? 0 : Math.max(0, prev - 1)
+        })
+        return
+      }
+      if (e.key === 'Enter' && focusIndex >= 0) {
+        const it = items[focusIndex]
+        if (!it) return
+        e.preventDefault()
+        window.electronAPI.copyToClipboard(it.id).then((ok) => {
+          if (ok) {
+            setToastMsg('已复制')
+            window.clearTimeout(toastTimer.current)
+            toastTimer.current = window.setTimeout(() => setToastMsg(''), 1600)
+          }
+        }).catch(() => { /* 忽略 */ })
+        return
+      }
+      if (e.key === 'Escape') {
+        if (query) setQuery('')
+        else window.electronAPI.collapseToFloat()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [items, focusIndex, query])
+
+  // 选中的卡片自动滚进视野
+  useEffect(() => {
+    if (focusIndex < 0) return
+    const id = items[focusIndex]?.id
+    if (!id) return
+    document
+      .querySelector(`.clipboard-card[data-item-id="${id}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [focusIndex, items])
+
+  // 换搜索词 / 换筛选时清掉选中
+  useEffect(() => {
+    setFocusIndex(-1)
+  }, [search, filter])
+
+  // 往下翻找老图片时，右下角出现一个小箭头，点一下平滑回到顶部
+  useEffect(() => {
+    const tick = () => {
+      const el = listRef.current
+      if (el) setShowToTop(el.scrollTop > 160)
+    }
+    tick()
+    const timer = window.setInterval(tick, 250)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const backToTop = useCallback(() => {
+    const el = listRef.current
+    if (!el) return
+    setShowToTop(false)
+    el.scrollTo({ top: 0, behavior: 'smooth' })
+    // 兜底：窗口被遮挡时浏览器可能不跑平滑动画，500ms 后还没回去就直接跳
+    window.setTimeout(() => {
+      if (listRef.current && listRef.current.scrollTop > 2) listRef.current.scrollTop = 0
+    }, 500)
+  }, [])
 
   // 新版本提示：新版本发布后，第一次启动会在面板顶部弹一张"更新内容"卡
   type UpdateInfo = {
@@ -72,10 +200,6 @@ export default function App() {
       }, 400)
     }, 20000)
     return () => window.clearInterval(timer)
-  }, [])
-
-  const handleSearch = useCallback((query: string) => {
-    setSearch(query)
   }, [])
 
   // 卡片靠近发光（跟随的光斑层已移除）
@@ -154,11 +278,85 @@ export default function App() {
         </div>
       </header>
 
-      <SearchBar onSearch={handleSearch} />
-
-      <div className="list-area">
-        {items.length === 0 ? <EmptyState /> : <ClipboardList items={items} onChanged={refresh} />}
+      <div className="search-row">
+        <SearchBar value={query} onChange={setQuery} />
+        <button
+          className="layout-toggle"
+          title={layout === 'grid' ? '切成单列' : '切成网格（图片看得更多）'}
+          onClick={toggleLayout}
+        >
+          {layout === 'grid' ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="3.5" y="4.5" width="17" height="6" rx="2" />
+              <rect x="3.5" y="13.5" width="17" height="6" rx="2" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="3.5" y="4" width="7.5" height="7.5" rx="2" />
+              <rect x="13" y="4" width="7.5" height="7.5" rx="2" />
+              <rect x="3.5" y="13" width="7.5" height="7.5" rx="2" />
+              <rect x="13" y="13" width="7.5" height="7.5" rx="2" />
+            </svg>
+          )}
+        </button>
       </div>
+
+      <div className="filter-chips" data-src-count={sources.length}>
+        {FILTERS.map((f) => (
+          <button
+            key={f.key || 'all'}
+            className={`chip${filter === f.key ? ' chip-on' : ''}`}
+            onClick={() => {
+              setFilter(f.key)
+              if (listRef.current) listRef.current.scrollTop = 0
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+        {sources.map((s) => {
+          const key = `src:${s.app}` as HistoryFilter
+          return (
+            <button
+              key={key}
+              className={`chip chip-src${filter === key ? ' chip-on' : ''}`}
+              title={`只看从 ${s.app} 复制的（${s.count} 条）`}
+              onClick={() => {
+                setFilter(filter === key ? '' : key)
+                if (listRef.current) listRef.current.scrollTop = 0
+              }}
+            >
+              {s.app}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="list-area" ref={listRef}>
+        {items.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <ClipboardList
+            items={items}
+            onChanged={refresh}
+            layout={layout}
+            focusedId={items[focusIndex]?.id ?? null}
+          />
+        )}
+      </div>
+
+      <button
+        className={`to-top${showToTop ? ' show' : ''}`}
+        title="回到顶部"
+        aria-hidden={!showToTop}
+        tabIndex={showToTop ? 0 : -1}
+        onClick={backToTop}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 19V6" />
+          <path d="M6 12l6-6 6 6" />
+        </svg>
+      </button>
 
       {toastMsg && <div className="global-toast">{toastMsg}</div>}
 

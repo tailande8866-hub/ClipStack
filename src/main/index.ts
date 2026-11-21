@@ -28,7 +28,8 @@ import {
   setSetting,
   getDbPath,
 } from './database'
-import { startMonitoring, stopMonitoring, onNewItem } from './clipboard-monitor'
+import { startMonitoring, stopMonitoring, onNewItem, runOcrBackfill } from './clipboard-monitor'
+import { runImageCompaction } from './image-compact'
 import { registerIpcHandlers, setMainWindow, notifyNewItem } from './ipc-handlers'
 import { startCleanupScheduler, stopCleanupScheduler } from './cleanup-scheduler'
 import {
@@ -925,8 +926,101 @@ function buildDiagnosticsText(): string {
   return lines.join('\r\n')
 }
 
-async function exportDiagnostics(): Promise<{ ok: boolean; canceled?: boolean; path?: string; message?: string }> {
+// ============ 备份 / 恢复 ============
+const PS_EXE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
+async function exportBackup(): Promise<{ ok: boolean; canceled?: boolean; path?: string; message?: string }> {
   const win = settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null
+  const stamp = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const name = `剪贴栈备份-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.zip`
+  const options: Electron.SaveDialogOptions = {
+    title: '导出备份',
+    defaultPath: join(app.getPath('documents'), name),
+    filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }],
+  }
+  const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+  try {
+    const src = join(getDataDir(), '*')
+    execFileSync(PS_EXE, [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `Compress-Archive -Path ${psQuote(src)} -DestinationPath ${psQuote(result.filePath)} -Force`,
+    ], { windowsHide: true, timeout: 120000 })
+    return { ok: true, path: result.filePath }
+  } catch (err) {
+    return { ok: false, message: (err as Error).message }
+  }
+}
+
+async function restoreBackup(): Promise<{ ok: boolean; canceled?: boolean; message?: string }> {
+  const win = settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null
+  const options: Electron.OpenDialogOptions = {
+    title: '从备份恢复',
+    properties: ['openFile'],
+    filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }],
+  }
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true }
+
+  const zip = result.filePaths[0]
+  const tmp = join(app.getPath('temp'), `clipstack-restore-${Date.now()}`)
+  try {
+    execFileSync(PS_EXE, [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `Expand-Archive -Path ${psQuote(zip)} -DestinationPath ${psQuote(tmp)} -Force`,
+    ], { windowsHide: true, timeout: 120000 })
+
+    let dbFile = join(tmp, 'data.db')
+    if (!fs.existsSync(dbFile)) {
+      // 兼容直接压缩了数据目录文件夹的情况
+      const sub = fs.readdirSync(tmp, { withFileTypes: true }).find((d) => d.isDirectory())
+      if (sub) dbFile = join(tmp, sub.name, 'data.db')
+    }
+    if (!fs.existsSync(dbFile)) return { ok: false, message: '这个压缩包里没有 data.db，不像是剪贴栈的备份。' }
+
+    const root = dirname(dbFile)
+    const dataDir = getDataDir()
+    // 先把现在的数据整体挪到一边，坏了还能找回来
+    const keep = `${dataDir}-恢复前-${Date.now()}`
+    try {
+      fs.mkdirSync(keep, { recursive: true })
+      const curDb = getDbPath()
+      if (fs.existsSync(curDb)) fs.copyFileSync(curDb, join(keep, 'data.db'))
+      const curImages = getImagesDir()
+      if (fs.existsSync(curImages)) fs.cpSync(curImages, join(keep, 'images'), { recursive: true })
+    } catch { /* 兜底拷贝失败不阻断恢复 */ }
+
+    closeDatabase()
+    if (fs.existsSync(dbFile)) fs.copyFileSync(dbFile, getDbPath())
+    const newImages = join(root, 'images')
+    if (fs.existsSync(newImages)) {
+      fs.rmSync(getImagesDir(), { recursive: true, force: true })
+      fs.mkdirSync(getImagesDir(), { recursive: true })
+      for (const f of fs.readdirSync(newImages)) {
+        fs.copyFileSync(join(newImages, f), join(getImagesDir(), f))
+      }
+    }
+    fs.rmSync(tmp, { recursive: true, force: true })
+
+    // 数据已经换好了，重启让新库生效
+    setTimeout(() => {
+      app.relaunch()
+      app.exit(0)
+    }, 600)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, message: (err as Error).message }
+  }
+}
+
+async function exportDiagnostics(): Promise<{ ok: boolean; canceled?: boolean; path?: string; message?: string }> {  const win = settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null
   const stamp = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
   const name = `小明剪贴板-诊断-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.txt`
@@ -1022,6 +1116,15 @@ async function resetToDefaultDir(): Promise<{ ok: boolean; message?: string }> {
 
 function registerWindowHandlers(): void {
   ipcMain.on('window:collapse', () => collapseToFloat())
+
+  // 从卡片拖出去：用系统级拖拽把图片文件本身拖到别的窗口
+  ipcMain.on('drag:start', (event, filePath: string) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win || !filePath || !fs.existsSync(filePath)) return
+      win.webContents.startDrag({ file: filePath, icon: filePath })
+    } catch { /* 拖拽失败不影响复制 */ }
+  })
   ipcMain.on('float:ignore', (_e, ignore: boolean) => {
     if (!floatWindow || floatWindow.isDestroyed()) return
     floatWindow.setIgnoreMouseEvents(!!ignore, { forward: true })
@@ -1113,6 +1216,8 @@ function registerWindowHandlers(): void {
   })
 
   ipcMain.handle('settings:export-diagnostics', () => exportDiagnostics())
+  ipcMain.handle('backup:export', async () => exportBackup())
+  ipcMain.handle('backup:restore', async () => restoreBackup())
 
   ipcMain.handle('settings:diagnostics-text', () => buildDiagnosticsText())
 
@@ -1169,6 +1274,10 @@ app.whenReady().then(async () => {
   onNewItem(notifyNewItem)
   startMonitoring()
   startCleanupScheduler()
+  // 老截图补做 OCR：每 60 秒两张，慢慢补齐，不卡剪贴板监听
+  setInterval(() => { try { runOcrBackfill() } catch { /* 忽略 */ } }, 60000)
+  // 历史大图慢慢压：每 90 秒处理 2 张，不抢前台体验
+  setInterval(() => { try { runImageCompaction(2) } catch { /* 忽略 */ } }, 90000)
 
   app.setLoginItemSettings({ openAtLogin: true })
 
