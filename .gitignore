@@ -18,3 +18,7 @@ tools/_*
 
 # 构建产物打包，走 Releases 上传，不入库
 /*.zip
+*.7z
+存贴屋-*.zip
+CunTieWu-*.zip
+*.asar
