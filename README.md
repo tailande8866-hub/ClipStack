@@ -1,4 +1,4 @@
-# 剪贴栈 · ClipStack
+# 存贴屋
 
 > **你的复制截图历史仓库。**
 
@@ -48,7 +48,7 @@
 
 ### 方式一：下载压缩包（推荐）
 
-到 [Releases](https://github.com/tailande8866-hub/ClipStack/releases/latest) 下载最新的 `ClipStack-*-x64.zip`，解压到任意目录（例如 `D:\ClipStack`），双击 `剪贴栈.exe` 即可运行，无需安装。
+到 [Releases](https://github.com/tailande8866-hub/ClipStack/releases/latest) 下载最新的 `存贴屋-*-x64.zip`，解压到任意目录（例如 `D:\存贴屋`），双击 `存贴屋.exe` 即可运行，无需安装。
 
 > 首次启动 Windows SmartScreen 可能提示「未知发布者」，点「更多信息 → 仍要运行」即可（个人项目没有代码签名证书）。
 
@@ -56,7 +56,7 @@
 
 ```powershell
 git clone https://github.com/tailande8866-hub/ClipStack.git
-cd ClipStack
+cd 存贴屋
 npm install
 npm run dev
 ```
@@ -104,7 +104,7 @@ clipboard-history\
 ```powershell
 npm run build          # 编译
 npm run package:dir    # 免安装目录版 → dist\win-unpacked
-npx electron-builder --win zip   # 便携压缩包 → dist\ClipStack-1.2.0-x64.zip
+npx electron-builder --win zip   # 便携压缩包 → dist\存贴屋-1.4.8-x64.zip
 ```
 
 图标由 `tools/make-icon3d.py`（主程序）与 `tools/make-tray-icon.py`（托盘小图标）生成，需要 Python + Pillow。
