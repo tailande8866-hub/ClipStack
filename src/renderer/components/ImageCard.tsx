@@ -49,11 +49,7 @@ export default function ImageCard({ item, onCopy }: Props) {
       ref={cardRef}
       className="image-card"
       onClick={onCopy}
-      onDoubleClick={(e) => {
-        e.stopPropagation()
-        if (src) setPreview(true)
-      }}
-      title="单击复制这张图片（双击看大图，也可以直接拖到别的窗口）"
+      title="单击复制这张图片（右上看大图，也可以直接拖到别的窗口）"
       draggable
       onDragStart={(e) => {
         if (!item.image_path) return
@@ -66,6 +62,27 @@ export default function ImageCard({ item, onCopy }: Props) {
         <img className="image-card-thumb" src={src} alt="" />
       ) : (
         <div className="image-card-placeholder" />
+      )}
+      {src && (
+        <button
+          className="image-card-zoom"
+          title="看大图"
+          onClick={(e) => {
+            // 别让它冒泡成"复制"，看大图就只是看大图
+            e.stopPropagation()
+            setPreview(true)
+          }}
+        >
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       )}
       <div className="text-card-footer">
         {item.is_pinned ? <span className="pin-badge">已置顶</span> : <span />}

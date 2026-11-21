@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react'
 
-// 保留时长以小时为单位，0 = 永久
+// 保留时长以小时为单位，0 = 永久。直接从「1 天」起步，不再给小时级选项
 const OPTIONS = [
-  { value: '2', label: '2 小时' },
-  { value: '4', label: '4 小时' },
-  { value: '6', label: '6 小时' },
   { value: '24', label: '1 天' },
   { value: '72', label: '3 天' },
   { value: '168', label: '7 天' },
+  { value: '720', label: '30 天' },
   { value: '0', label: '永久' },
 ]
 
