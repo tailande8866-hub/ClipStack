@@ -15,3 +15,6 @@ tools/_*.py
 _test*
 
 tools/_*
+
+# 构建产物打包，走 Releases 上传，不入库
+/*.zip
