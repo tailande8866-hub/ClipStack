@@ -1,3 +1,4 @@
+compression: maximum
 appId: com.floatpaste.app
 productName: "存贴屋"
 copyright: Copyright 2026 存贴屋
@@ -20,6 +21,9 @@ extraResources:
     to: tray.png
 
 win:
+  electronLanguages:
+    - zh-CN
+    - en-US
   target:
     - target: nsis
       arch: [x64]

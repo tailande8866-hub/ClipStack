@@ -15,11 +15,11 @@
   "author": "tailande8866-hub",
   "license": "MIT",
   "dependencies": {
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
     "sql.js": "^1.14.1"
   },
   "devDependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
